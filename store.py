@@ -9,6 +9,7 @@ No database needed for this tool's scale; template.json is the record.
 import json
 import os
 import re
+import shutil
 import uuid
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -74,7 +75,11 @@ def create_template(name, image_path, image_ext, width, height, variables):
     os.makedirs(tdir, exist_ok=True)
 
     dest_image = os.path.join(tdir, f"base{image_ext}")
-    os.replace(image_path, dest_image)
+    # os.replace() requires source and destination on the same filesystem;
+    # in containers /tmp is often a separate mount from the app directory,
+    # which raises "Invalid cross-device link". shutil.move() falls back
+    # to a copy+delete when a same-device rename isn't possible.
+    shutil.move(image_path, dest_image)
 
     record = {
         "id": template_id,
