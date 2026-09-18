@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "image-template-tool",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "PORT=\"$PORT\" python3 app.py"],
+      "port": 8935,
+      "autoPort": true
+    }
+  ]
+}

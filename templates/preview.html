@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Test — {{ template.name }}{% endblock %}
+{% block content %}
+  <div class="row-between">
+    <h1>{{ template.name }}</h1>
+    <a class="btn" href="/templates/{{ template.id }}/edit">← Back to editor</a>
+  </div>
+
+  <div class="preview-layout">
+    <section>
+      <h2>Try it</h2>
+      <form id="preview-form">
+        {% for v in template.variables %}
+          <label>{{ v.label }}
+            <input type="text" name="{{ v.label }}" value="{{ v.default_text }}">
+          </label>
+        {% endfor %}
+        <label>Format
+          <select name="format">
+            <option value="png">PNG</option>
+            <option value="jpg">JPG</option>
+          </select>
+        </label>
+        <button type="submit" class="btn btn-primary">Render</button>
+      </form>
+      <div id="result"></div>
+    </section>
+
+    <section>
+      <h2>API</h2>
+
+      <h3>Simple URL (GET)</h3>
+      <p>Drop this straight into an <code>&lt;img src&gt;</code>, email, or no-code tool. Each label becomes a query parameter.</p>
+      <pre id="short-url-snippet" class="code-block"></pre>
+
+      <h3>JSON (POST)</h3>
+      <p>Use this if values might contain special characters you don't want URL-encoding, or you're already sending JSON.</p>
+      <pre id="curl-snippet" class="code-block"></pre>
+
+      <h3>Response</h3>
+      <p>Binary image (<code>image/png</code> or <code>image/jpeg</code>) on success. On error, JSON: <code>{"error": "..."}</code>.</p>
+      <h3>Variables in this template</h3>
+      <table class="var-table">
+        <thead><tr><th>label</th><th>font</th><th>size</th><th>color</th></tr></thead>
+        <tbody>
+          {% for v in template.variables %}
+            <tr><td><code>{{ v.label }}</code></td><td>{{ v.font }}</td><td>{{ v.font_size }}</td><td>{{ v.color }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <script>
+    window.TEMPLATE = {{ template | tojson }};
+    window.API_URL = {{ api_url | tojson }};
+    window.SHORT_URL = {{ short_url | tojson }};
+  </script>
+  <script src="/static/js/preview.js"></script>
+{% endblock %}

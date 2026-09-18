@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit Template' if template else 'New Template' }} — Image Template Tool{% endblock %}
+{% block content %}
+  <div class="editor-layout">
+    <section class="canvas-pane">
+      <div class="row-between">
+        <input id="tpl-name" type="text" placeholder="Template name"
+               value="{{ template.name if template else '' }}" class="tpl-name-input">
+        <div class="canvas-actions">
+          {% if template %}
+            <a class="btn" href="/templates/{{ template.id }}/preview">Test / API →</a>
+          {% endif %}
+          <button id="add-var-btn" class="btn" {% if not template %}disabled{% endif %}>+ Add Text</button>
+          <button id="save-btn" class="btn btn-primary">Save Template</button>
+        </div>
+      </div>
+      <p id="save-status" class="save-status" hidden></p>
+
+      {% if not template %}
+        <div id="upload-zone" class="upload-zone">
+          <p>Drop an image here or</p>
+          <label class="btn">
+            Choose Image
+            <input id="image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+          </label>
+        </div>
+      {% endif %}
+
+      <div id="canvas-wrap" class="canvas-wrap" {% if not template %}hidden{% endif %}>
+        <img id="base-image" src="{{ '/template-image/' + template.id if template else '' }}" alt="">
+        <div id="boxes-layer" class="boxes-layer"></div>
+
+        <div id="text-toolbar" class="text-toolbar" hidden>
+          <select id="tb-font" title="Font"></select>
+          <input id="tb-size" type="number" min="4" max="500" step="1" title="Font size" class="tb-size">
+          <input id="tb-color" type="color" title="Color" class="tb-color">
+          <div class="tb-align-group" role="group" aria-label="Text align">
+            <button type="button" class="tb-align-btn" data-align="left" title="Align left">L</button>
+            <button type="button" class="tb-align-btn" data-align="center" title="Align center">C</button>
+            <button type="button" class="tb-align-btn" data-align="right" title="Align right">R</button>
+          </div>
+          <button type="button" id="tb-delete" class="tb-icon-btn tb-danger" title="Delete">✕</button>
+        </div>
+      </div>
+      <p class="hint">
+        {% if not template %}Upload an image, then {% endif %}
+        Click "+ Add Text" or double-click the image to place text. Click text to select it, click again (or double-click) to type. Drag to move, drag the corner handle to resize.
+      </p>
+    </section>
+
+    <aside class="inspector-pane">
+      <h2>Variables</h2>
+      <div id="var-list" class="var-list"></div>
+      {% if not template %}
+        <p class="muted small">Upload an image to start adding text.</p>
+      {% endif %}
+      <p class="muted small">The label under each text box is its API key — click it on the image to rename.</p>
+    </aside>
+  </div>
+
+  <style id="font-face-styles"></style>
+  <script>
+    window.INITIAL_TEMPLATE = {{ (template | tojson) if template else 'null' }};
+    window.FONTS = {{ fonts | tojson }};
+    window.IS_EDIT = {{ 'true' if template else 'false' }};
+    window.TEMPLATE_ID = {{ (template.id | tojson) if template else 'null' }};
+  </script>
+  <script src="/static/js/editor.js"></script>
+{% endblock %}

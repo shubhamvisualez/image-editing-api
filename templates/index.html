@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Templates — Image Template Tool{% endblock %}
+{% block content %}
+  <div class="row-between">
+    <h1>Templates</h1>
+    <a class="btn btn-primary" href="/new">+ New Template</a>
+  </div>
+
+  {% if not templates %}
+    <div class="empty-state">
+      <p>No templates yet.</p>
+      <a class="btn btn-primary" href="/new">Create your first template</a>
+    </div>
+  {% else %}
+    <div class="template-grid">
+      {% for t in templates %}
+        <div class="template-card">
+          <a href="/templates/{{ t.id }}/edit" class="thumb-link">
+            <img class="thumb" src="/template-image/{{ t.id }}" alt="{{ t.name }}">
+          </a>
+          <div class="template-card-body">
+            <h3>{{ t.name }}</h3>
+            <p class="muted">{{ t.width }}×{{ t.height }}px · {{ t.variable_count }} variable{{ 's' if t.variable_count != 1 else '' }}</p>
+            <p class="labels">
+              {% for l in t.labels %}<code>{{ l }}</code>{% endfor %}
+            </p>
+            <div class="template-card-actions">
+              <a class="btn btn-sm" href="/templates/{{ t.id }}/edit">Edit</a>
+              <a class="btn btn-sm" href="/templates/{{ t.id }}/preview">Test / API</a>
+              <button class="btn btn-sm btn-danger" data-delete="{{ t.id }}">Delete</button>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <script>
+    // Native confirm()/alert() dialogs are suppressed in some embedded
+    // browser contexts, which would make Delete silently do nothing.
+    // Use a click-again-to-confirm pattern on the button itself instead.
+    document.querySelectorAll('[data-delete]').forEach(btn => {
+      let confirmTimer = null;
+      const originalText = btn.textContent;
+
+      function reset() {
+        if (confirmTimer) clearTimeout(confirmTimer);
+        confirmTimer = null;
+        btn.textContent = originalText;
+        btn.classList.remove('btn-confirming');
+      }
+
+      btn.addEventListener('click', async () => {
+        if (!confirmTimer) {
+          btn.textContent = 'Confirm delete?';
+          btn.classList.add('btn-confirming');
+          confirmTimer = setTimeout(reset, 4000);
+          return;
+        }
+        reset();
+        const id = btn.getAttribute('data-delete');
+        btn.disabled = true;
+        const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          btn.closest('.template-card').remove();
+        } else {
+          btn.disabled = false;
+          btn.textContent = 'Delete failed';
+          setTimeout(() => { btn.textContent = originalText; }, 2500);
+        }
+      });
+    });
+  </script>
+{% endblock %}
