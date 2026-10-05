@@ -99,11 +99,45 @@ set (edit `FONT_FAMILIES` in that script to add more).
 
 ## Storage
 
-Templates are stored as plain files under `data/templates/<id>/` (the
-base image + a `template.json` definition) — no database needed.
+Each template is a folder under `data/templates/<id>/`: the uploaded base
+image (`base.png`, `base.jpg`, or `base.webp`) plus `template.json`. No
+database and no S3. On the EC2 box that directory stays on disk across
+restarts.
+
+Leave `URL_PREFIX` unset when you run `python app.py` directly. The install
+script sets `URL_PREFIX=/image-editor` in `.env` so Apache can mount the app
+under that path.
+
+## Deploy on the existing Apache EC2
+
+The box already runs `ai_assistant.service` (Gunicorn + FastAPI). This app
+is a second service on **127.0.0.1:8010**. Apache proxies `/image-editor/`
+to it. Do not restart or edit `ai_assistant`.
+
+On the server, as `shubham_visualez`, from the app directory:
+
+```bash
+bash deploy/install.sh
+```
+
+Then check the service:
+
+```bash
+curl -s http://127.0.0.1:8010/healthz
+```
+
+`image_storage` should be `"local"`. Paste `deploy/apache-image-editor.conf`
+into the existing virtual host **above** any `ProxyPass /` rule, then:
+
+```bash
+sudo a2enmod proxy proxy_http headers
+sudo systemctl reload apache2
+```
+
+The site is then `https://<your-domain>/image-editor/`.
+API calls use that prefix, for example
+`https://<your-domain>/image-editor/<id>?headline=Hello`.
 
 **On Render's free plan there is no persistent disk** — every deploy or
 restart wipes `data/templates/`, so templates created there won't survive.
-For anything long-lived, upgrade to a paid instance and add a `disk:`
-block to `render.yaml` (mounted at `/app/data`), or move storage to
-S3/similar.
+For anything long-lived, use the EC2 install above.

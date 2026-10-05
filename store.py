@@ -1,10 +1,8 @@
-"""Simple JSON-file storage for image templates.
+"""JSON-file storage for image templates.
 
 Each template is a folder under data/templates/<id>/ containing:
-  - base.<ext>   the uploaded source image
+  - base.<ext>     the uploaded source image
   - template.json  the template definition (name, canvas size, variables)
-
-No database needed for this tool's scale; template.json is the record.
 """
 import json
 import os
@@ -24,6 +22,19 @@ class TemplateNotFound(Exception):
 
 class InvalidTemplate(ValueError):
     pass
+
+
+MIME_BY_EXT = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
+
+def _mime_for(filename):
+    ext = os.path.splitext(filename or "")[1].lower()
+    return MIME_BY_EXT.get(ext, "application/octet-stream")
 
 
 def _template_dir(template_id):
@@ -73,24 +84,29 @@ def create_template(name, image_path, image_ext, width, height, variables):
     template_id = uuid.uuid4().hex[:12]
     tdir = _template_dir(template_id)
     os.makedirs(tdir, exist_ok=True)
-
-    dest_image = os.path.join(tdir, f"base{image_ext}")
-    # os.replace() requires source and destination on the same filesystem;
-    # in containers /tmp is often a separate mount from the app directory,
-    # which raises "Invalid cross-device link". shutil.move() falls back
-    # to a copy+delete when a same-device rename isn't possible.
-    shutil.move(image_path, dest_image)
+    filename = f"base{image_ext}"
 
     record = {
         "id": template_id,
         "name": name or "Untitled template",
-        "image_file": f"base{image_ext}",
+        "image_file": filename,
         "width": width,
         "height": height,
         "variables": variables,
     }
-    with open(_template_json_path(template_id), "w") as f:
-        json.dump(record, f, indent=2)
+
+    dest = os.path.join(tdir, filename)
+    try:
+        # shutil.move() falls back to copy+delete when /tmp and the app
+        # directory are different filesystems (common in containers).
+        shutil.move(image_path, dest)
+        with open(_template_json_path(template_id), "w") as f:
+            json.dump(record, f, indent=2)
+    except Exception:
+        shutil.rmtree(tdir, ignore_errors=True)
+        if os.path.exists(image_path):
+            os.remove(image_path)
+        raise
     return record
 
 
@@ -116,7 +132,16 @@ def get_template(template_id):
 
 def get_template_image_path(template_id):
     record = get_template(template_id)
-    return os.path.join(_template_dir(template_id), record["image_file"])
+    path = os.path.join(_template_dir(template_id), record["image_file"])
+    if not os.path.exists(path):
+        raise TemplateNotFound(template_id)
+    return path
+
+
+def read_template_image(template_id):
+    """Return (local file path, mimetype) for the base image."""
+    record = get_template(template_id)
+    return get_template_image_path(template_id), _mime_for(record.get("image_file"))
 
 
 def list_templates():
@@ -141,8 +166,6 @@ def list_templates():
 
 def delete_template(template_id):
     tdir = _template_dir(template_id)
-    if not os.path.isdir(tdir):
+    if not os.path.isdir(tdir) or not os.path.exists(_template_json_path(template_id)):
         raise TemplateNotFound(template_id)
-    for fname in os.listdir(tdir):
-        os.remove(os.path.join(tdir, fname))
-    os.rmdir(tdir)
+    shutil.rmtree(tdir)

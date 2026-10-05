@@ -1,13 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Test — {{ template.name }}{% endblock %}
 {% block content %}
-  <div class="row-between">
-    <h1>{{ template.name }}</h1>
-    <a class="btn" href="/templates/{{ template.id }}/edit">← Back to editor</a>
+  <div class="page-head">
+    <div>
+      <h1>{{ template.name }}</h1>
+      <p class="lede">{{ template.width }}×{{ template.height }}px · {{ template.variables|length }} variable{{ 's' if template.variables|length != 1 else '' }}</p>
+    </div>
+    <a class="btn" href="{{ url_for('edit_template_page', template_id=template.id) }}">Back to editor</a>
   </div>
 
   <div class="preview-layout">
-    <section>
+    <section class="panel">
       <h2>Try it</h2>
       <form id="preview-form">
         {% for v in template.variables %}
@@ -23,38 +26,62 @@
         </label>
         <button type="submit" class="btn btn-primary">Render</button>
       </form>
-      <div id="result"></div>
     </section>
 
-    <section>
-      <h2>API</h2>
-
-      <h3>Simple URL (GET)</h3>
-      <p>Drop this straight into an <code>&lt;img src&gt;</code>, email, or no-code tool. Each label becomes a query parameter.</p>
-      <pre id="short-url-snippet" class="code-block"></pre>
-
-      <h3>JSON (POST)</h3>
-      <p>Use this if values might contain special characters you don't want URL-encoding, or you're already sending JSON.</p>
-      <pre id="curl-snippet" class="code-block"></pre>
-
-      <h3>Response</h3>
-      <p>Binary image (<code>image/png</code> or <code>image/jpeg</code>) on success. On error, JSON: <code>{"error": "..."}</code>.</p>
-      <h3>Variables in this template</h3>
-      <table class="var-table">
-        <thead><tr><th>label</th><th>font</th><th>size</th><th>color</th></tr></thead>
-        <tbody>
-          {% for v in template.variables %}
-            <tr><td><code>{{ v.label }}</code></td><td>{{ v.font }}</td><td>{{ v.font_size }}</td><td>{{ v.color }}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <section class="panel">
+      <div class="snippet-bar">
+        <h2>Result</h2>
+      </div>
+      <div id="result" class="result-frame">
+        <p class="muted">Fill in the fields and render to see the image here.</p>
+      </div>
     </section>
   </div>
+
+  <section class="panel api-panel">
+    <h2>API</h2>
+
+    <div class="snippet">
+      <div class="snippet-bar">
+        <h3>Simple URL</h3>
+        <button type="button" class="btn btn-sm" data-copy="short-url-snippet">Copy</button>
+      </div>
+      <p class="muted small">Use this in an <code>&lt;img src&gt;</code>, an email, or a no-code tool. Each label is a query parameter.</p>
+      <pre id="short-url-snippet" class="code-block"></pre>
+    </div>
+
+    <div class="snippet">
+      <div class="snippet-bar">
+        <h3>JSON POST</h3>
+        <button type="button" class="btn btn-sm" data-copy="curl-snippet">Copy</button>
+      </div>
+      <p class="muted small">Prefer this when the text is long or should stay out of server logs.</p>
+      <pre id="curl-snippet" class="code-block"></pre>
+    </div>
+
+    <h3>Response</h3>
+    <p class="muted">Image bytes (<code>image/png</code> or <code>image/jpeg</code>) on success. On error, JSON <code>{"error": "..."}</code>.</p>
+
+    <h3>Variables</h3>
+    <table class="var-table">
+      <thead><tr><th>Label</th><th>Font</th><th>Size</th><th>Color</th></tr></thead>
+      <tbody>
+        {% for v in template.variables %}
+          <tr>
+            <td><code>{{ v.label }}</code></td>
+            <td>{{ v.font }}</td>
+            <td>{{ v.font_size }}</td>
+            <td><span class="swatch" style="background: {{ v.color }}"></span> {{ v.color }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
 
   <script>
     window.TEMPLATE = {{ template | tojson }};
     window.API_URL = {{ api_url | tojson }};
     window.SHORT_URL = {{ short_url | tojson }};
   </script>
-  <script src="/static/js/preview.js"></script>
+  <script src="{{ url_for('static', filename='js/preview.js') }}"></script>
 {% endblock %}

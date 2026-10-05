@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  const BASE = window.APP_BASE || "";
+
   const state = {
     variables: [],
     selectedIndex: null,
@@ -53,7 +55,7 @@
     let css = "";
     window.FONTS.forEach((f) => {
       const slug = f.file.replace(/\.ttf$/, "");
-      css += `@font-face{font-family:"${fontFamilyFor(slug)}";src:url(/static/fonts/${f.file});font-display:swap;}\n`;
+      css += `@font-face{font-family:"${fontFamilyFor(slug)}";src:url(${BASE}/static/fonts/${f.file});font-display:swap;}\n`;
     });
     els.fontFaceStyles.textContent = css;
   }
@@ -234,7 +236,8 @@
     state.variables.forEach((v, i) => {
       const item = document.createElement("div");
       item.className = "var-list-item" + (i === state.selectedIndex ? " selected" : "");
-      item.innerHTML = `<code>${escapeHtml(v.label)}</code><span class="muted small">${v.font_size}px</span><button type="button" class="var-list-delete" title="Delete">✕</button>`;
+      const color = /^#[0-9a-fA-F]{3,8}$/.test(v.color || "") ? v.color : "#111111";
+      item.innerHTML = `<span class="swatch" style="background:${color}"></span><code>${escapeHtml(v.label)}</code><span class="muted small">${v.font_size}px</span><button type="button" class="var-list-delete" title="Delete">✕</button>`;
       item.addEventListener("click", (e) => {
         if (e.target.closest(".var-list-delete")) return;
         commitActiveEdit();
@@ -611,7 +614,7 @@
     try {
       const name = els.tplName.value.trim();
       if (window.IS_EDIT) {
-        const res = await fetch(`/api/templates/${window.TEMPLATE_ID}`, {
+        const res = await fetch(`${BASE}/api/templates/${window.TEMPLATE_ID}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, variables: state.variables }),
@@ -620,23 +623,23 @@
         if (!res.ok) throw new Error(data.error || "Save failed");
         els.saveBtn.textContent = "Saved ✓";
         showStatus("Template saved.", "ok");
-        setTimeout(() => (els.saveBtn.textContent = "Save Template"), 1500);
+        setTimeout(() => (els.saveBtn.textContent = "Save template"), 1500);
       } else {
         const form = new FormData();
         form.append("name", name);
         form.append("variables", JSON.stringify(state.variables));
         form.append("image", state.imageFile);
-        const res = await fetch("/api/templates", { method: "POST", body: form });
+        const res = await fetch(`${BASE}/api/templates`, { method: "POST", body: form });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Save failed");
-        window.location.href = `/templates/${data.id}/preview`;
+        window.location.href = `${BASE}/templates/${data.id}/preview`;
         return;
       }
     } catch (err) {
       showStatus(err.message, "error");
     } finally {
       els.saveBtn.disabled = false;
-      if (els.saveBtn.textContent === "Saving...") els.saveBtn.textContent = "Save Template";
+      if (els.saveBtn.textContent === "Saving...") els.saveBtn.textContent = "Save template";
     }
   }
 

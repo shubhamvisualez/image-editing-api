@@ -7,4 +7,4 @@ services:
     # Render's free plan has no persistent disk — data/templates/ is wiped
     # on every deploy/restart. Upgrade to a paid instance type and add a
     # `disk:` block (mountPath: /app/data) if templates need to survive
-    # deploys, or move template storage to S3/similar.
+    # deploys.

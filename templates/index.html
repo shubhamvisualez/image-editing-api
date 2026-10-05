@@ -1,45 +1,71 @@
 {% extends "base.html" %}
-{% block title %}Templates — Image Template Tool{% endblock %}
+{% block title %}Templates — Image Templates{% endblock %}
 {% block content %}
-  <div class="row-between">
-    <h1>Templates</h1>
-    <a class="btn btn-primary" href="/new">+ New Template</a>
+  <div class="page-head">
+    <div>
+      <h1>Templates</h1>
+      <p class="lede">Place text on a poster, certificate, or card once. Fill the same labels through the API whenever you need a finished image.</p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('new_template_page') }}">New template</a>
   </div>
 
   {% if not templates %}
     <div class="empty-state">
-      <p>No templates yet.</p>
-      <a class="btn btn-primary" href="/new">Create your first template</a>
+      <h2>No templates yet</h2>
+      <ol class="steps">
+        <li>Upload a base image.</li>
+        <li>Drop text boxes on it and name each label.</li>
+        <li>Call the API with those labels to render a new image.</li>
+      </ol>
+      <a class="btn btn-primary" href="{{ url_for('new_template_page') }}">Create your first template</a>
     </div>
   {% else %}
+    <div class="list-tools">
+      <input id="template-filter" class="search-input" type="search" placeholder="Search by name or label" aria-label="Search templates">
+      <p class="muted small">{{ templates|length }} template{{ 's' if templates|length != 1 else '' }}</p>
+    </div>
     <div class="template-grid">
       {% for t in templates %}
-        <div class="template-card">
-          <a href="/templates/{{ t.id }}/edit" class="thumb-link">
-            <img class="thumb" src="/template-image/{{ t.id }}" alt="{{ t.name }}">
+        <article class="template-card">
+          <a href="{{ url_for('edit_template_page', template_id=t.id) }}" class="thumb-link">
+            <img class="thumb" src="{{ url_for('template_image', template_id=t.id) }}" alt="">
           </a>
           <div class="template-card-body">
             <h3>{{ t.name }}</h3>
-            <p class="muted">{{ t.width }}×{{ t.height }}px · {{ t.variable_count }} variable{{ 's' if t.variable_count != 1 else '' }}</p>
+            <p class="muted">{{ t.width }}×{{ t.height }} · {{ t.variable_count }} variable{{ 's' if t.variable_count != 1 else '' }}</p>
             <p class="labels">
               {% for l in t.labels %}<code>{{ l }}</code>{% endfor %}
             </p>
             <div class="template-card-actions">
-              <a class="btn btn-sm" href="/templates/{{ t.id }}/edit">Edit</a>
-              <a class="btn btn-sm" href="/templates/{{ t.id }}/preview">Test / API</a>
-              <button class="btn btn-sm btn-danger" data-delete="{{ t.id }}">Delete</button>
+              <a class="btn btn-sm" href="{{ url_for('edit_template_page', template_id=t.id) }}">Edit</a>
+              <a class="btn btn-sm" href="{{ url_for('preview_template_page', template_id=t.id) }}">Test / API</a>
+              <button class="btn btn-sm btn-danger" type="button" data-delete="{{ t.id }}">Delete</button>
             </div>
           </div>
-        </div>
+        </article>
       {% endfor %}
     </div>
+    <p id="filter-empty" class="empty-state" hidden>No templates match that search.</p>
   {% endif %}
 
   <script>
-    // Native confirm()/alert() dialogs are suppressed in some embedded
-    // browser contexts, which would make Delete silently do nothing.
-    // Use a click-again-to-confirm pattern on the button itself instead.
-    document.querySelectorAll('[data-delete]').forEach(btn => {
+    const base = window.APP_BASE || "";
+    const filter = document.getElementById("template-filter");
+    const filterEmpty = document.getElementById("filter-empty");
+    if (filter) {
+      filter.addEventListener("input", () => {
+        const q = filter.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll(".template-card").forEach((card) => {
+          const match = !q || card.innerText.toLowerCase().includes(q);
+          card.hidden = !match;
+          if (match) shown += 1;
+        });
+        if (filterEmpty) filterEmpty.hidden = shown > 0;
+      });
+    }
+
+    document.querySelectorAll("[data-delete]").forEach((btn) => {
       let confirmTimer = null;
       const originalText = btn.textContent;
 
@@ -47,25 +73,26 @@
         if (confirmTimer) clearTimeout(confirmTimer);
         confirmTimer = null;
         btn.textContent = originalText;
-        btn.classList.remove('btn-confirming');
+        btn.classList.remove("btn-confirming");
       }
 
-      btn.addEventListener('click', async () => {
+      btn.addEventListener("click", async () => {
         if (!confirmTimer) {
-          btn.textContent = 'Confirm delete?';
-          btn.classList.add('btn-confirming');
+          btn.textContent = "Confirm delete?";
+          btn.classList.add("btn-confirming");
           confirmTimer = setTimeout(reset, 4000);
           return;
         }
         reset();
-        const id = btn.getAttribute('data-delete');
+        const id = btn.getAttribute("data-delete");
         btn.disabled = true;
-        const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+        const res = await fetch(`${base}/api/templates/${id}`, { method: "DELETE" });
         if (res.ok) {
-          btn.closest('.template-card').remove();
+          btn.closest(".template-card").remove();
+          if (!document.querySelector(".template-card")) window.location.reload();
         } else {
           btn.disabled = false;
-          btn.textContent = 'Delete failed';
+          btn.textContent = "Delete failed";
           setTimeout(() => { btn.textContent = originalText; }, 2500);
         }
       });

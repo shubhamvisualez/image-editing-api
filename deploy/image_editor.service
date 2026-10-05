@@ -1,0 +1,15 @@
+[Unit]
+Description=Gunicorn instance to serve the image template tool
+After=network.target
+
+[Service]
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=-__APP_DIR__/.env
+ExecStart=__APP_DIR__/venv/bin/gunicorn --bind 127.0.0.1:8010 --workers 2 --timeout 120 --access-logfile - --error-logfile - app:app
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

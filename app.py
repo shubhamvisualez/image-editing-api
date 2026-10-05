@@ -8,14 +8,32 @@ values to an API endpoint.
 import json
 import os
 import tempfile
-import uuid
 
-from flask import Flask, abort, jsonify, render_template, request, send_file, send_from_directory
+from flask import Flask, abort, jsonify, render_template, request, send_file
 from PIL import Image
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import render as renderer
 import store
+
+
+def _load_env_file():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):]
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+_load_env_file()
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB uploads
@@ -53,18 +71,23 @@ def preview_template_page(template_id):
         record = store.get_template(template_id)
     except store.TemplateNotFound:
         abort(404)
-    api_url = request.url_root.rstrip("/") + f"/api/templates/{template_id}/render"
-    short_url = request.url_root.rstrip("/") + f"/{template_id}"
+    root = public_base()
+    api_url = root + f"/api/templates/{template_id}/render"
+    short_url = root + f"/{template_id}"
     return render_template("preview.html", template=record, api_url=api_url, short_url=short_url)
 
 
 @app.route("/template-image/<template_id>")
 def template_image(template_id):
     try:
-        path = store.get_template_image_path(template_id)
+        source, mimetype = store.read_template_image(template_id)
     except store.TemplateNotFound:
         abort(404)
-    return send_file(path)
+    return send_file(source, mimetype=mimetype, max_age=3600)
+
+
+def public_base():
+    return request.url_root.rstrip("/") + (request.script_root or "")
 
 
 # ------------------------------------------------------------------ api ----
@@ -172,12 +195,12 @@ def api_render(template_id):
 def render_image_response(template_id, values, out_format):
     try:
         record = store.get_template(template_id)
-        image_path = store.get_template_image_path(template_id)
+        image_source, _image_type = store.read_template_image(template_id)
     except store.TemplateNotFound:
         return jsonify(error="Template not found."), 404
 
     try:
-        image_bytes, mimetype = renderer.render_template(record, image_path, values, out_format)
+        image_bytes, mimetype = renderer.render_template(record, image_source, values, out_format)
     except Exception as e:
         return jsonify(error=f"Render failed: {e}"), 500
 
@@ -208,7 +231,32 @@ def short_render(template_id):
 
 @app.route("/healthz")
 def healthz():
-    return {"status": "ok"}
+    return {"status": "ok", "image_storage": "local"}
+
+
+class ScriptPrefixMiddleware:
+    """Expose the app under URL_PREFIX when Apache strips that prefix."""
+
+    def __init__(self, wsgi_app, prefix):
+        self.wsgi_app = wsgi_app
+        self.prefix = prefix
+
+    def __call__(self, environ, start_response):
+        if self.prefix:
+            environ["SCRIPT_NAME"] = self.prefix
+            path = environ.get("PATH_INFO") or "/"
+            if path == self.prefix or path.startswith(self.prefix + "/"):
+                environ["PATH_INFO"] = path[len(self.prefix):] or "/"
+        return self.wsgi_app(environ, start_response)
+
+
+_prefix = os.environ.get("URL_PREFIX", "").strip()
+if _prefix and not _prefix.startswith("/"):
+    _prefix = "/" + _prefix
+_prefix = _prefix.rstrip("/")
+if _prefix:
+    app.wsgi_app = ScriptPrefixMiddleware(app.wsgi_app, _prefix)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
 @app.errorhandler(HTTPException)

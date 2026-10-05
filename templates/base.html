@@ -3,19 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Image Template Tool{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css">
+  <title>{% block title %}Image Templates{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <script>window.APP_BASE = {{ request.script_root|tojson }};</script>
   {% block head %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <header class="topbar">
-    <a class="brand" href="/">🖼️ Image Template Tool</a>
+    <a class="brand" href="{{ url_for('index') }}">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="28" height="28">
+          <rect x="3" y="6" width="26" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
+          <circle cx="11" cy="13" r="2" fill="currentColor"/>
+          <path d="M7 22l6-6 4 4 3-3 5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <span class="brand-text">
+        <span class="brand-name">Image Templates</span>
+        <span class="brand-sub">Design once, render by API</span>
+      </span>
+    </a>
     <nav>
-      <a href="/">Templates</a>
-      <a href="/new">+ New Template</a>
+      <a href="{{ url_for('index') }}" {% if request.endpoint in ('index', 'edit_template_page', 'preview_template_page') %}class="active"{% endif %}>Templates</a>
+      <a class="nav-new" href="{{ url_for('new_template_page') }}">New template</a>
     </nav>
   </header>
-  <main class="page">
+  <main class="page {% block page_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
 </body>

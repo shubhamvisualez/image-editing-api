@@ -6,45 +6,43 @@
   const curlSnippet = document.getElementById("curl-snippet");
   const shortUrlSnippet = document.getElementById("short-url-snippet");
 
-  function buildValuesSample() {
+  function currentValues() {
+    const formData = new FormData(form);
     const values = {};
-    window.TEMPLATE.variables.forEach((v) => (values[v.label] = v.default_text));
+    window.TEMPLATE.variables.forEach((v) => {
+      const typed = formData.get(v.label);
+      values[v.label] = typed == null ? v.default_text : String(typed);
+    });
     return values;
   }
 
-  function buildShortUrl(values) {
-    const params = new URLSearchParams(values);
-    return `${window.SHORT_URL}?${params.toString()}`;
+  function currentFormat() {
+    return new FormData(form).get("format") || "png";
   }
 
   function renderSnippet() {
-    const values = buildValuesSample();
-    const payload = { values, format: "png" };
-    const json = JSON.stringify(payload, null, 2);
+    const values = currentValues();
+    const format = currentFormat();
+    const payload = { values, format };
     curlSnippet.textContent =
 `curl -X POST "${window.API_URL}" \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify(payload)}' \\
-  --output result.png
+  --output result.${format === "jpg" ? "jpg" : "png"}`;
 
-# JSON body:
-${json}`;
-
-    const shortUrl = buildShortUrl(values);
-    shortUrlSnippet.textContent =
-`${shortUrl}
-
-<img src="${shortUrl}">`;
+    const params = new URLSearchParams(values);
+    if (format !== "png") params.set("format", format);
+    const shortUrl = `${window.SHORT_URL}?${params.toString()}`;
+    shortUrlSnippet.textContent = shortUrl;
   }
+
+  form.addEventListener("input", renderSnippet);
+  form.addEventListener("change", renderSnippet);
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const formData = new FormData(form);
-    const values = {};
-    window.TEMPLATE.variables.forEach((v) => {
-      values[v.label] = formData.get(v.label) || "";
-    });
-    const format = formData.get("format") || "png";
+    const values = currentValues();
+    const format = currentFormat();
 
     result.innerHTML = "<p class='muted'>Rendering…</p>";
     try {
@@ -62,10 +60,39 @@ ${json}`;
       result.innerHTML = "";
       const img = document.createElement("img");
       img.src = url;
+      img.alt = "Rendered template";
       result.appendChild(img);
+
+      const actions = document.createElement("div");
+      actions.className = "result-actions";
+      const download = document.createElement("a");
+      download.className = "btn btn-sm";
+      download.href = url;
+      download.download = `render.${format === "jpg" ? "jpg" : "png"}`;
+      download.textContent = "Download";
+      actions.appendChild(download);
+      result.appendChild(actions);
     } catch (err) {
-      result.innerHTML = `<p style="color:#d73a49">${err.message}</p>`;
+      result.innerHTML = "";
+      const message = document.createElement("p");
+      message.className = "save-status status-error";
+      message.textContent = err.message;
+      result.appendChild(message);
     }
+  });
+
+  document.querySelectorAll("[data-copy]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const node = document.getElementById(btn.getAttribute("data-copy"));
+      const previous = btn.textContent;
+      try {
+        await navigator.clipboard.writeText(node.textContent);
+        btn.textContent = "Copied";
+      } catch (err) {
+        btn.textContent = "Copy failed";
+      }
+      setTimeout(() => { btn.textContent = previous; }, 1500);
+    });
   });
 
   renderSnippet();

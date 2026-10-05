@@ -1,33 +1,36 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Edit Template' if template else 'New Template' }} — Image Template Tool{% endblock %}
+{% block title %}{{ 'Edit template' if template else 'New template' }} — Image Templates{% endblock %}
+{% block body_class %}is-editor{% endblock %}
+{% block page_class %}page-wide{% endblock %}
 {% block content %}
   <div class="editor-layout">
     <section class="canvas-pane">
       <div class="row-between">
-        <input id="tpl-name" type="text" placeholder="Template name"
+        <input id="tpl-name" type="text" placeholder="Template name" autocomplete="off"
                value="{{ template.name if template else '' }}" class="tpl-name-input">
         <div class="canvas-actions">
           {% if template %}
-            <a class="btn" href="/templates/{{ template.id }}/preview">Test / API →</a>
+            <a class="btn" href="{{ url_for('preview_template_page', template_id=template.id) }}">Test / API</a>
           {% endif %}
-          <button id="add-var-btn" class="btn" {% if not template %}disabled{% endif %}>+ Add Text</button>
-          <button id="save-btn" class="btn btn-primary">Save Template</button>
+          <button id="add-var-btn" class="btn" type="button" {% if not template %}disabled{% endif %}>Add text</button>
+          <button id="save-btn" class="btn btn-primary" type="button">Save template</button>
         </div>
       </div>
       <p id="save-status" class="save-status" hidden></p>
 
       {% if not template %}
         <div id="upload-zone" class="upload-zone">
-          <p>Drop an image here or</p>
-          <label class="btn">
-            Choose Image
+          <p class="upload-title">Drop a base image</p>
+          <p class="muted">PNG, JPG, or WebP · up to 20 MB</p>
+          <label class="btn btn-primary">
+            Choose image
             <input id="image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
           </label>
         </div>
       {% endif %}
 
       <div id="canvas-wrap" class="canvas-wrap" {% if not template %}hidden{% endif %}>
-        <img id="base-image" src="{{ '/template-image/' + template.id if template else '' }}" alt="">
+        <img id="base-image" src="{% if template %}{{ url_for('template_image', template_id=template.id) }}{% endif %}" alt="">
         <div id="boxes-layer" class="boxes-layer"></div>
 
         <div id="text-toolbar" class="text-toolbar" hidden>
@@ -44,17 +47,17 @@
       </div>
       <p class="hint">
         {% if not template %}Upload an image, then {% endif %}
-        Click "+ Add Text" or double-click the image to place text. Click text to select it, click again (or double-click) to type. Drag to move, drag the corner handle to resize.
+        use Add text, or double-click the image, to place a box. Click to select, click again to type. Drag to move, drag the corner to change the wrap width.
       </p>
     </section>
 
     <aside class="inspector-pane">
-      <h2>Variables</h2>
+      <h2>Text variables</h2>
+      <p class="muted small">Each label is the API key. Click a label on the image to rename it.</p>
       <div id="var-list" class="var-list"></div>
       {% if not template %}
         <p class="muted small">Upload an image to start adding text.</p>
       {% endif %}
-      <p class="muted small">The label under each text box is its API key — click it on the image to rename.</p>
     </aside>
   </div>
 
@@ -65,5 +68,5 @@
     window.IS_EDIT = {{ 'true' if template else 'false' }};
     window.TEMPLATE_ID = {{ (template.id | tojson) if template else 'null' }};
   </script>
-  <script src="/static/js/editor.js"></script>
+  <script src="{{ url_for('static', filename='js/editor.js') }}"></script>
 {% endblock %}

@@ -78,14 +78,14 @@ def _wrap_text(draw, text, font, max_width):
     return lines
 
 
-def render_template(record, image_path, values, output_format="PNG"):
+def render_template(record, image_source, values, output_format="PNG"):
     """
     record: template dict (from store.get_template)
-    image_path: path to the base image file
+    image_source: filesystem path to the base image
     values: dict {label: text}
     Returns: (bytes, mimetype)
     """
-    base = Image.open(image_path).convert("RGBA")
+    base = Image.open(image_source).convert("RGBA")
     overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
