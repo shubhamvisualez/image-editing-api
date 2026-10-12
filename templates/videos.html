@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Videos — Image Templates{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>Video templates</h1>
+      <p class="lede">This is where you set up a video template. Upload the base video, place the text, set each line’s time range, and save. The template id on the next screen is what the API call <code>Template_Video_New</code> uses.</p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('new_video_page') }}">New video</a>
+  </div>
+
+  {% if not videos %}
+    <div class="empty-state">
+      <h2>No video templates yet</h2>
+      <ol class="steps">
+        <li>Upload a base video.</li>
+        <li>Add text and drag it on the picture.</li>
+        <li>Drag each bar on the timeline to set when it appears.</li>
+      </ol>
+      <a class="btn btn-primary" href="{{ url_for('new_video_page') }}">Create a video template</a>
+    </div>
+  {% else %}
+    <div class="template-grid">
+      {% for v in videos %}
+        <article class="template-card">
+          <a href="{{ url_for('edit_video_page', video_id=v.id) }}" class="thumb-link">
+            {% if v.has_poster %}
+              <img class="thumb" src="{{ url_for('video_poster', video_id=v.id) }}" alt="">
+            {% else %}
+              <span class="video-thumb-fallback">Video</span>
+            {% endif %}
+          </a>
+          <div class="template-card-body">
+            <h3>{{ v.name }}</h3>
+            <p class="muted">{{ v.width }}×{{ v.height }} · {{ '%.1f'|format(v.duration) }}s · {{ v.variable_count }} text layer{{ 's' if v.variable_count != 1 else '' }}</p>
+            <p class="labels">
+              {% for l in v.labels %}<code>{{ l }}</code>{% endfor %}
+            </p>
+            <div class="template-card-actions">
+              <a class="btn btn-sm" href="{{ url_for('edit_video_page', video_id=v.id) }}">Edit</a>
+              <a class="btn btn-sm" href="{{ url_for('preview_video_page', video_id=v.id) }}">Test / API</a>
+              <button class="btn btn-sm btn-danger" type="button" data-delete="{{ v.id }}">Delete</button>
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <script>
+    const base = window.APP_BASE || "";
+    document.querySelectorAll("[data-delete]").forEach((btn) => {
+      let confirmTimer = null;
+      const originalText = btn.textContent;
+      function reset() {
+        if (confirmTimer) clearTimeout(confirmTimer);
+        confirmTimer = null;
+        btn.textContent = originalText;
+        btn.classList.remove("btn-confirming");
+      }
+      btn.addEventListener("click", async () => {
+        if (!confirmTimer) {
+          btn.textContent = "Confirm delete?";
+          btn.classList.add("btn-confirming");
+          confirmTimer = setTimeout(reset, 4000);
+          return;
+        }
+        reset();
+        btn.disabled = true;
+        const res = await fetch(`${base}/api/videos/${btn.getAttribute("data-delete")}`, { method: "DELETE" });
+        if (res.ok) {
+          btn.closest(".template-card").remove();
+          if (!document.querySelector(".template-card")) window.location.reload();
+        } else {
+          btn.disabled = false;
+          btn.textContent = "Delete failed";
+          setTimeout(() => { btn.textContent = originalText; }, 2500);
+        }
+      });
+    });
+  </script>
+{% endblock %}

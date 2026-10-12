@@ -25,6 +25,7 @@
     </a>
     <nav>
       <a href="{{ url_for('index') }}" {% if request.endpoint in ('index', 'edit_template_page', 'preview_template_page') %}class="active"{% endif %}>Templates</a>
+      <a href="{{ url_for('videos_index') }}" {% if request.endpoint in ('videos_index', 'new_video_page', 'edit_video_page', 'preview_video_page') %}class="active"{% endif %}>Videos</a>
       <a class="nav-new" href="{{ url_for('new_template_page') }}">New template</a>
     </nav>
   </header>

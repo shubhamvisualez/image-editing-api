@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit video' if video else 'New video' }} — Image Templates{% endblock %}
+{% block body_class %}is-editor{% endblock %}
+{% block page_class %}page-wide{% endblock %}
+{% block content %}
+  <div class="editor-layout">
+    <section class="canvas-pane">
+      <div class="row-between">
+        <input id="tpl-name" type="text" placeholder="Video template name" autocomplete="off"
+               value="{{ video.name if video else '' }}" class="tpl-name-input">
+        <div class="canvas-actions">
+          {% if video %}
+            <a class="btn" href="{{ url_for('preview_video_page', video_id=video.id) }}">Test / API</a>
+          {% endif %}
+          <button id="add-var-btn" class="btn" type="button" {% if not video %}disabled{% endif %}>Add text</button>
+          <button id="save-btn" class="btn btn-primary" type="button">Save video</button>
+        </div>
+      </div>
+      <p id="save-status" class="save-status" hidden></p>
+
+      {% if not video %}
+        <div id="upload-zone" class="upload-zone">
+          <p class="upload-title">Drop a base video</p>
+          <p class="muted">MP4, MOV, or WebM · up to 200 MB</p>
+          <label class="btn btn-primary">
+            Choose video
+            <input id="video-input" type="file" accept="video/mp4,video/quicktime,video/webm" hidden>
+          </label>
+        </div>
+      {% endif %}
+
+      <div id="canvas-wrap" class="canvas-wrap" {% if not video %}hidden{% endif %}>
+        <video id="base-video" {% if video %}src="{{ url_for('video_file', video_id=video.id) }}"{% endif %}
+               playsinline preload="auto"></video>
+        <div id="boxes-layer" class="boxes-layer"></div>
+        <div id="text-toolbar" class="text-toolbar" hidden>
+          <select id="tb-font" title="Font"></select>
+          <input id="tb-size" type="number" min="4" max="500" step="1" title="Font size" class="tb-size">
+          <input id="tb-color" type="color" title="Color" class="tb-color">
+          <div class="tb-align-group" role="group" aria-label="Text align">
+            <button type="button" class="tb-align-btn" data-align="left" title="Align left">L</button>
+            <button type="button" class="tb-align-btn" data-align="center" title="Align center">C</button>
+            <button type="button" class="tb-align-btn" data-align="right" title="Align right">R</button>
+          </div>
+          <button type="button" id="tb-delete" class="tb-icon-btn tb-danger" title="Delete">✕</button>
+        </div>
+      </div>
+
+      <div id="timeline" class="timeline" {% if not video %}hidden{% endif %}>
+        <div class="timeline-transport">
+          <button type="button" id="play-btn" class="btn btn-sm">Play</button>
+          <span id="time-readout" class="time-readout">0:00.0 / 0:00.0</span>
+        </div>
+        <div id="timeline-scroll" class="timeline-scroll">
+          <div id="timeline-ruler" class="timeline-ruler"></div>
+          <div id="timeline-tracks" class="timeline-tracks"></div>
+          <div id="playhead" class="playhead"></div>
+        </div>
+      </div>
+      <p class="hint">Add text, drag it on the frame, then drag its bar to choose when it appears and how long it stays. Text outside the playhead is hidden unless it is selected.</p>
+    </section>
+
+    <aside class="inspector-pane">
+      <h2>Text layers</h2>
+      <p class="muted small">The label is the API key. Start and end are seconds on the video.</p>
+      <div id="var-list" class="var-list"></div>
+      <div id="time-fields" class="time-fields" hidden>
+        <label>Start (seconds)
+          <input id="field-start" type="number" min="0" step="0.1">
+        </label>
+        <label>End (seconds)
+          <input id="field-end" type="number" min="0" step="0.1">
+        </label>
+      </div>
+    </aside>
+  </div>
+
+  <style id="font-face-styles"></style>
+  <script>
+    window.INITIAL_VIDEO = {{ (video | tojson) if video else 'null' }};
+    window.FONTS = {{ fonts | tojson }};
+    window.IS_EDIT = {{ 'true' if video else 'false' }};
+    window.VIDEO_ID = {{ (video.id | tojson) if video else 'null' }};
+  </script>
+  <script src="{{ url_for('static', filename='js/video-editor.js') }}"></script>
+{% endblock %}

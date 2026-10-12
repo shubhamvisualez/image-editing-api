@@ -530,3 +530,96 @@ code {
 .var-table th,
 .var-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
 .var-table th { color: var(--muted); font-weight: 650; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* --- video templates (image editor rules above are unchanged) --- */
+.canvas-wrap video { display: block; width: 100%; height: auto; pointer-events: none; background: #1c1915; }
+.video-thumb-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 180px;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.timeline { margin-top: 8px; }
+.timeline-transport { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.time-readout { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+.timeline-scroll {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #faf7f2;
+  overflow: hidden;
+}
+.timeline-ruler {
+  position: relative;
+  height: 28px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  background: #fff;
+}
+.ruler-mark {
+  position: absolute;
+  top: 6px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.timeline-tracks { position: relative; min-height: 42px; }
+.timeline-row {
+  position: relative;
+  height: 36px;
+  border-top: 1px solid #f0ebe3;
+}
+.timeline-row.selected { background: var(--accent-soft); }
+.timeline-bar {
+  position: absolute;
+  top: 6px;
+  height: 24px;
+  min-width: 8px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  cursor: grab;
+  overflow: hidden;
+}
+.bar-label {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.bar-handle {
+  width: 8px;
+  height: 100%;
+  flex: none;
+  cursor: ew-resize;
+  background: rgba(0, 0, 0, 0.18);
+}
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #b42318;
+  pointer-events: none;
+  z-index: 3;
+}
+.time-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.time-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 650; }
+.time-fields input {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.result-video { width: 100%; max-height: 520px; border-radius: 8px; background: #1c1915; }

@@ -97,6 +97,32 @@ most poster/card/badge use cases without needing internet access at
 render time. Re-run `scripts/download_fonts.py` to refresh or extend the
 set (edit `FONT_FAMILIES` in that script to add more).
 
+## Video templates
+
+Image templates are unchanged. Videos are a separate library at `/videos`.
+
+Upload a base video, place text on the frame, and drag each layer’s bar on the timeline to set when it appears and how long it stays — the same idea as a [Pirsonal](https://pirsonal.com/platform/pirsonal-editor/) text layer (a start time and a duration). Rendering burns that text into an mp4 with ffmpeg. The server needs `ffmpeg` and `ffprobe` (`sudo apt-get install -y ffmpeg`).
+
+Set the template up in the browser at `/videos/new` (on the server:
+`https://quicklook.orientbell.com/image-editor/videos/new`). Save it, open
+Test / API, and copy the template id.
+
+The render call matches Pirsonal’s JSON-RPC method `Template_Video_New`
+([Pirsonal API](https://app.pirsonal.com/docAPI)). `data` is the text for
+each layer. Keys may be `headline` or `$headline`. The response is ready
+immediately: `result.url` is the mp4. `Video_Get` loads that same object
+again, and `Template_List` lists templates.
+
+```bash
+curl -X POST "http://localhost:8000/api" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"Template_Video_New","params":{"templateID":"<id>","name":"Hello","description":"","data":{"headline":"Ada"}}}'
+```
+
+A shorter form is `http://localhost:8000/v/<id>?headline=Ada`. Timing lives on the template; the API only replaces the text. Video files are stored under `data/videos/<id>/`.
+
+Gunicorn’s timeout in `deploy/image_editor.service` is 300 seconds so a render can finish. If the service was installed earlier, update that unit and run `sudo systemctl daemon-reload && sudo systemctl restart image_editor`.
+
 ## Storage
 
 Each template is a folder under `data/templates/<id>/`: the uploaded base
@@ -126,12 +152,12 @@ Then check the service:
 curl -s http://127.0.0.1:8010/healthz
 ```
 
-`image_storage` should be `"local"`. Paste `deploy/apache-image-editor.conf`
-into the existing virtual host **above** any `ProxyPass /` rule, then:
+`image_storage` should be `"local"`. The app folder sits inside
+`public_html`, so Apache returns 403 for `/image-editor/` until the proxy
+is enabled. The unit name is `apache2`:
 
 ```bash
-sudo a2enmod proxy proxy_http headers
-sudo systemctl reload apache2
+bash deploy/enable-apache.sh
 ```
 
 The site is then `https://<your-domain>/image-editor/`.

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Test — {{ video.name }}{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>{{ video.name }}</h1>
+      <p class="lede">Template ID <code id="template-id">{{ video.id }}</code> · {{ video.width }}×{{ video.height }} · {{ '%.1f'|format(video.duration) }}s</p>
+    </div>
+    <a class="btn" href="{{ url_for('edit_video_page', video_id=video.id) }}">Back to editor</a>
+  </div>
+
+  <div class="preview-layout">
+    <section class="panel">
+      <h2>Try it</h2>
+      <form id="preview-form">
+        {% for v in video.variables %}
+          <label>{{ v.label }}
+            <span class="muted small">{{ '%.1f'|format(v.start) }}s – {{ '%.1f'|format(v.end) }}s</span>
+            <input type="text" name="{{ v.label }}" value="{{ v.default_text }}">
+          </label>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary">Render video</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>Result</h2>
+      <div id="result" class="result-frame">
+        <p class="muted">Render to preview the mp4 with your text burned in for each layer’s time range.</p>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel api-panel">
+    <h2>API</h2>
+    <p class="muted small">Same call Pirsonal uses: <code>Template_Video_New</code>. <code>data</code> is the text for each layer. The result includes <code>url</code>, the finished mp4.</p>
+    <div class="snippet">
+      <div class="snippet-bar">
+        <h3>Template_Video_New</h3>
+        <button type="button" class="btn btn-sm" data-copy="rpc-snippet">Copy</button>
+      </div>
+      <pre id="rpc-snippet" class="code-block"></pre>
+    </div>
+    <div class="snippet">
+      <div class="snippet-bar">
+        <h3>Simple URL</h3>
+        <button type="button" class="btn btn-sm" data-copy="short-url-snippet">Copy</button>
+      </div>
+      <p class="muted small">Each label is a query parameter. The response is an mp4.</p>
+      <pre id="short-url-snippet" class="code-block"></pre>
+    </div>
+    <div class="snippet">
+      <div class="snippet-bar">
+        <h3>JSON POST</h3>
+        <button type="button" class="btn btn-sm" data-copy="curl-snippet">Copy</button>
+      </div>
+      <pre id="curl-snippet" class="code-block"></pre>
+    </div>
+    <h3>Layers</h3>
+    <table class="var-table">
+      <thead><tr><th>Label</th><th>From</th><th>To</th><th>Font</th><th>Size</th></tr></thead>
+      <tbody>
+        {% for v in video.variables %}
+          <tr>
+            <td><code>{{ v.label }}</code></td>
+            <td>{{ '%.2f'|format(v.start) }}s</td>
+            <td>{{ '%.2f'|format(v.end) }}s</td>
+            <td>{{ v.font }}</td>
+            <td>{{ v.font_size }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <script>
+    window.VIDEO = {{ video | tojson }};
+    window.API_URL = {{ api_url | tojson }};
+    window.SHORT_URL = {{ short_url | tojson }};
+    window.RPC_URL = {{ rpc_url | tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='js/video-preview.js') }}"></script>
+{% endblock %}

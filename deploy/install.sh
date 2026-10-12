@@ -31,6 +31,10 @@ if ! compgen -G "static/fonts/*.ttf" > /dev/null; then
   ./venv/bin/python scripts/download_fonts.py
 fi
 
+if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+  echo "Video templates need ffmpeg. Install it with: sudo apt-get install -y ffmpeg"
+fi
+
 if [[ ! -f .env ]]; then
   sed -e 's|^# URL_PREFIX=/image-editor|URL_PREFIX=/image-editor|' \
       .env.example > .env
@@ -52,10 +56,11 @@ cat <<EOF
 
 Service is on 127.0.0.1:8010. ai_assistant.service was not changed.
 
-Add this to the existing Apache vhost, above any ProxyPass / rule,
-then run: sudo systemctl reload apache2
+Gunicorn is only on 127.0.0.1:8010. Apache still serves
+public_html/image-editor as a folder, which returns 403 until you proxy it.
+The service name is apache2, not apache:
 
-$(sed 's/^/  /' deploy/apache-image-editor.conf | sed '/^  #/d')
+  bash deploy/enable-apache.sh
 
 Public URL: https://<your-domain>/image-editor/
 Health check on the box: curl -s http://127.0.0.1:8010/healthz
