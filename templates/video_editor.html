@@ -62,8 +62,11 @@
 
     <aside class="inspector-pane">
       <h2>Text layers</h2>
-      <p class="muted small">The label is the API key. Start and end are seconds on the video.</p>
+      <p class="muted small">The variable name is the API key. Select a text layer, then rename it here. Start and end are seconds on the video.</p>
       <div id="var-list" class="var-list"></div>
+      <label id="label-fields" class="name-field" hidden>Variable name
+        <input id="field-label" type="text" autocomplete="off" spellcheck="false" placeholder="headline">
+      </label>
       <div id="time-fields" class="time-fields" hidden>
         <label>Start (seconds)
           <input id="field-start" type="number" min="0" step="0.1">

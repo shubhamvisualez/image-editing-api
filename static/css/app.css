@@ -532,7 +532,29 @@ code {
 .var-table th { color: var(--muted); font-weight: 650; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
 
 /* --- video templates (image editor rules above are unchanged) --- */
-.canvas-wrap video { display: block; width: 100%; height: auto; pointer-events: none; background: #1c1915; }
+body.is-editor .canvas-pane {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 108px);
+}
+.canvas-wrap:has(video) {
+  width: fit-content;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.canvas-wrap video {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: max(220px, calc(100vh - 430px));
+  margin: 0;
+  pointer-events: none;
+  background: #1c1915;
+}
 .video-thumb-fallback {
   display: grid;
   place-items: center;
@@ -613,6 +635,23 @@ code {
   pointer-events: none;
   z-index: 3;
 }
+.name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--muted);
+}
+.name-field input {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink);
+}
 .time-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
 .time-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 650; }
 .time-fields input {
@@ -622,4 +661,10 @@ code {
   font-size: 14px;
   color: var(--ink);
 }
-.result-video { width: 100%; max-height: 520px; border-radius: 8px; background: #1c1915; }
+.result-video {
+  width: auto;
+  max-width: 100%;
+  max-height: calc(100vh - 280px);
+  border-radius: 8px;
+  background: #1c1915;
+}

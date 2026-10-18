@@ -7,15 +7,15 @@ Clients POST to /api:
                "data":{"headline":"Ada"}}}
 
 `data` may be an object or a JSON string. Keys may include the leading $.
-The call renders immediately and returns the video object, including the mp4 URL.
+The call stores a row (video id + template id) and returns at once.
+Encoding continues in the background, then the mp4 is uploaded to S3.
+The same template and text values are not encoded again.
 """
 import json
 import os
 import uuid
-import urllib.request
-from datetime import datetime, timezone
 
-import video_render
+import video_catalog
 import video_store
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -47,7 +47,7 @@ def dispatch(body, base_url):
             result = _video_new(params, base_url)
         elif method == "Video_Get":
             fields = _positional(params, ["id", "videoID"])
-            result = _video_get(fields.get("id") or fields.get("videoID"))
+            result = _video_get(fields.get("id") or fields.get("videoID"), base_url)
         else:
             return _fail(call_id, -32601, "Method not found")
     except RpcError as exc:
@@ -123,11 +123,14 @@ def _values_from_data(data, record):
             parsed = {}
     if isinstance(parsed, dict) and isinstance(parsed.get("values"), dict):
         parsed = parsed["values"]
+    labels = {var["label"] for var in record.get("variables") or []}
+    # These are request fields, not text, unless a layer is actually named that.
+    reserved = {"values", "templateID", "templateId", "name", "description", "inputs", "webhook"}
     provided = {}
     if isinstance(parsed, dict):
         for key, value in parsed.items():
             name = key[1:] if isinstance(key, str) and key.startswith("$") else key
-            if name in ("values", "templateID", "name", "description"):
+            if name not in labels and name in reserved:
                 continue
             provided[name] = "" if value is None else str(value)
     values = {}
@@ -150,55 +153,46 @@ def _video_new(params, base_url):
     template_id = fields.get("templateID") or fields.get("templateId")
     record = _load_template(template_id)
     values = _values_from_data(fields.get("data"), record)
-    try:
-        mp4 = video_render.render_video(record, video_store.video_path(record["id"]), values)
-    except video_render.VideoRenderError as exc:
-        raise RpcError(1012, f"Error processing video: {exc}")
-    render_id = uuid.uuid4().hex[:12]
-    folder = RENDERS_DIR
-    os.makedirs(folder, exist_ok=True)
-    mp4_path = os.path.join(folder, f"{render_id}.mp4")
-    with open(mp4_path, "wb") as handle:
-        handle.write(mp4)
     data_param = fields.get("data")
     if not isinstance(data_param, str):
         data_param = json.dumps(data_param if data_param is not None else values)
-    video = {
-        "id": render_id,
-        "templateID": record["id"],
-        "name": fields.get("name") or record["name"],
-        "description": fields.get("description") or "",
-        "duration": int(round(float(record["duration"]) * 1000)),
-        "date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
-        "status": {"code": "done"},
-        "data": data_param,
-        "url": f"{base_url}/renders/{render_id}.mp4",
-        "outFiles": [
-            {
-                "name": f"{render_id}.mp4",
-                "profile": "MP4_H264_AAC",
-                "size": len(mp4),
-                "url": f"{base_url}/renders/{render_id}.mp4",
-                "storage": {"pirsonalID": render_id},
-            }
-        ],
-    }
-    with open(os.path.join(folder, f"{render_id}.json"), "w", encoding="utf-8") as handle:
-        json.dump(video, handle, indent=2)
+    digest = video_catalog.data_hash(record, values)
+    try:
+        existing = video_catalog.find_reusable(record["id"], digest)
+    except video_catalog.CatalogError as exc:
+        raise RpcError(5000, str(exc))
+    if existing:
+        return video_catalog._row_to_video(existing, base_url)
+    render_id = uuid.uuid4().hex[:12]
     webhook = fields.get("webhook") or fields.get("notifyUrl")
-    if isinstance(webhook, str) and webhook.startswith("http"):
-        _notify(webhook, video)
-    return video
+    try:
+        video_catalog.begin_render(
+            render_id,
+            record,
+            values,
+            fields.get("name") or record["name"],
+            fields.get("description") or "",
+            data_param,
+            digest,
+            webhook,
+            base_url,
+        )
+        row = video_catalog.get(render_id)
+    except video_catalog.CatalogError as exc:
+        raise RpcError(5000, str(exc))
+    return video_catalog._row_to_video(row, base_url)
 
 
-def _video_get(render_id):
+def _video_get(render_id, base_url):
     if not render_id:
         raise RpcError(1007, "Video not found")
-    path = os.path.join(RENDERS_DIR, f"{render_id}.json")
-    if not os.path.exists(path):
+    try:
+        row = video_catalog.get(render_id)
+    except video_catalog.CatalogError as exc:
+        raise RpcError(5000, str(exc))
+    if not row:
         raise RpcError(1007, "Video not found")
-    with open(path, encoding="utf-8") as handle:
-        return json.load(handle)
+    return video_catalog._row_to_video(row, base_url)
 
 
 def render_file(render_id):
@@ -206,20 +200,6 @@ def render_file(render_id):
     if not os.path.exists(path):
         return None
     return path
-
-
-def _notify(url, video):
-    payload = json.dumps(video).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json", "User-Agent": "Pirsonal"},
-        method="POST",
-    )
-    try:
-        urllib.request.urlopen(request, timeout=10).close()
-    except Exception:
-        pass
 
 
 def _fail(call_id, code, message):

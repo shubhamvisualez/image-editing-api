@@ -43,6 +43,8 @@
     timeFields: el("time-fields"),
     fieldStart: el("field-start"),
     fieldEnd: el("field-end"),
+    labelFields: el("label-fields"),
+    fieldLabel: el("field-label"),
     scroll: el("timeline-scroll"),
   };
 
@@ -161,6 +163,10 @@
       els.addVarBtn.disabled = false;
       recomputeScale();
       renderAll();
+      requestAnimationFrame(() => {
+        recomputeScale();
+        renderBoxes();
+      });
     };
   }
 
@@ -178,13 +184,18 @@
       if (els.video.duration) state.duration = els.video.duration;
       recomputeScale();
       renderAll();
+      requestAnimationFrame(() => {
+        recomputeScale();
+        renderBoxes();
+      });
     };
     if (els.video.readyState >= 1) finish();
     else els.video.onloadedmetadata = finish;
   }
 
   function recomputeScale() {
-    state.scale = els.canvasWrap.clientWidth / state.naturalWidth;
+    const displayed = els.video.clientWidth || els.canvasWrap.clientWidth;
+    state.scale = displayed / state.naturalWidth;
   }
 
   window.addEventListener("resize", () => {
@@ -267,6 +278,7 @@
     if (!state.variables.length) {
       els.varList.innerHTML = '<p class="muted small">No text yet.</p>';
       els.timeFields.hidden = true;
+      syncLabelField();
       return;
     }
     state.variables.forEach((v, i) => {
@@ -284,6 +296,7 @@
       els.varList.appendChild(item);
     });
     syncTimeFields();
+    syncLabelField();
   }
 
   function renderTimeline() {
@@ -408,6 +421,7 @@
     state.selectedIndex = i;
     updateSelectionClasses();
     syncTimeFields();
+    syncLabelField();
   }
 
   function deselectAll() {
@@ -415,6 +429,43 @@
     updateSelectionClasses();
     hideToolbar();
     syncTimeFields();
+    syncLabelField();
+  }
+
+  function syncLabelField() {
+    const v = currentSelected();
+    if (!els.labelFields) return;
+    els.labelFields.hidden = !v;
+    if (!v || document.activeElement === els.fieldLabel) return;
+    els.fieldLabel.value = v.label;
+  }
+
+  function applyLabel() {
+    const v = currentSelected();
+    if (!v) return;
+    const next = els.fieldLabel.value.trim();
+    const labelRe = /^[A-Za-z][A-Za-z0-9_]{0,49}$/;
+    if (!labelRe.test(next)) {
+      showStatus("Variable name must start with a letter and use only letters, numbers, or underscores.", "error");
+      els.fieldLabel.value = v.label;
+      return;
+    }
+    if (state.variables.some((other, idx) => idx !== state.selectedIndex && other.label === next)) {
+      showStatus(`Variable name "${next}" is already used.`, "error");
+      els.fieldLabel.value = v.label;
+      return;
+    }
+    if (v.default_text === v.label) v.default_text = next;
+    v.label = next;
+    const box = els.boxesLayer.children[state.selectedIndex];
+    if (box) {
+      const tag = box.querySelector(".box-label-tag");
+      if (tag) tag.textContent = next;
+      const textDiv = box.querySelector(".var-box-text");
+      if (textDiv && !textDiv.isContentEditable) textDiv.textContent = v.default_text;
+    }
+    renderVarList();
+    renderTimeline();
   }
 
   function updateSelectionClasses() {
@@ -444,6 +495,7 @@
     if (active && active.classList && active.classList.contains("var-box-text") && active.isContentEditable) {
       active.blur();
     }
+    if (els.fieldLabel && document.activeElement === els.fieldLabel) els.fieldLabel.blur();
   }
 
   function enterTextEditMode(i) {
@@ -817,6 +869,27 @@
       deselectAll();
     });
     els.saveBtn.addEventListener("click", save);
+    if (els.fieldLabel) {
+      els.fieldLabel.addEventListener("change", applyLabel);
+      els.fieldLabel.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          els.fieldLabel.blur();
+        }
+      });
+    }
+    if (window.ResizeObserver) {
+      let lastDisplayed = 0;
+      const observer = new ResizeObserver(() => {
+        if (!state.naturalWidth) return;
+        const displayed = els.video.clientWidth;
+        if (Math.abs(displayed - lastDisplayed) < 1) return;
+        lastDisplayed = displayed;
+        recomputeScale();
+        renderBoxes();
+      });
+      observer.observe(els.video);
+    }
     if (window.INITIAL_VIDEO) loadExisting(window.INITIAL_VIDEO);
     else setupUpload();
   }

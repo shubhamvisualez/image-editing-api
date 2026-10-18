@@ -31,6 +31,8 @@
     tbSize: el("tb-size"),
     tbColor: el("tb-color"),
     tbDelete: el("tb-delete"),
+    labelFields: el("label-fields"),
+    fieldLabel: el("field-label"),
   };
 
   function fontFamilyFor(slug) {
@@ -231,6 +233,7 @@
     els.varList.innerHTML = "";
     if (!state.variables.length) {
       els.varList.innerHTML = '<p class="muted small">No text yet.</p>';
+      syncLabelField();
       return;
     }
     state.variables.forEach((v, i) => {
@@ -251,6 +254,7 @@
       });
       els.varList.appendChild(item);
     });
+    syncLabelField();
   }
 
   function escapeHtml(s) {
@@ -262,12 +266,49 @@
   function selectVariable(i) {
     state.selectedIndex = i;
     updateSelectionClasses();
+    syncLabelField();
   }
 
   function deselectAll() {
     state.selectedIndex = null;
     updateSelectionClasses();
     hideToolbar();
+    syncLabelField();
+  }
+
+  function syncLabelField() {
+    const v = currentSelected();
+    if (!els.labelFields) return;
+    els.labelFields.hidden = !v;
+    if (!v || document.activeElement === els.fieldLabel) return;
+    els.fieldLabel.value = v.label;
+  }
+
+  function applyLabel() {
+    const v = currentSelected();
+    if (!v) return;
+    const next = els.fieldLabel.value.trim();
+    const labelRe = /^[A-Za-z][A-Za-z0-9_]{0,49}$/;
+    if (!labelRe.test(next)) {
+      showStatus("Variable name must start with a letter and use only letters, numbers, or underscores.", "error");
+      els.fieldLabel.value = v.label;
+      return;
+    }
+    if (state.variables.some((other, idx) => idx !== state.selectedIndex && other.label === next)) {
+      showStatus(`Variable name "${next}" is already used.`, "error");
+      els.fieldLabel.value = v.label;
+      return;
+    }
+    if (v.default_text === v.label) v.default_text = next;
+    v.label = next;
+    const box = els.boxesLayer.children[state.selectedIndex];
+    if (box) {
+      const tag = box.querySelector(".box-label-tag");
+      if (tag) tag.textContent = next;
+      const textDiv = box.querySelector(".var-box-text");
+      if (textDiv && !textDiv.isContentEditable) textDiv.textContent = v.default_text;
+    }
+    renderVarList();
   }
 
   // Toggles the "selected" class on existing box/list elements without
@@ -298,6 +339,7 @@
     if (active && active.classList && active.classList.contains("var-box-text") && active.isContentEditable) {
       active.blur();
     }
+    if (els.fieldLabel && document.activeElement === els.fieldLabel) els.fieldLabel.blur();
   }
 
   function enterTextEditMode(i) {
@@ -671,6 +713,15 @@
     });
 
     els.saveBtn.addEventListener("click", save);
+    if (els.fieldLabel) {
+      els.fieldLabel.addEventListener("change", applyLabel);
+      els.fieldLabel.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          els.fieldLabel.blur();
+        }
+      });
+    }
 
     if (window.INITIAL_TEMPLATE) {
       loadExistingTemplate(window.INITIAL_TEMPLATE);

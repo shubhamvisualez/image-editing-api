@@ -109,9 +109,19 @@ Test / API, and copy the template id.
 
 The render call matches Pirsonal’s JSON-RPC method `Template_Video_New`
 ([Pirsonal API](https://app.pirsonal.com/docAPI)). `data` is the text for
-each layer. Keys may be `headline` or `$headline`. The response is ready
-immediately: `result.url` is the mp4. `Video_Get` loads that same object
-again, and `Template_List` lists templates.
+each layer. Keys may be `headline` or `$headline`. The call returns
+immediately with a video id and `status.code` of `processing`. Encoding
+continues in the background, the mp4 is uploaded to S3, and MySQL stores
+that video id with the template id. Call `Video_Get` with the id until
+`status.code` is `done`; `result.url` is the mp4. The same template, layout, and
+text are not encoded again. `Template_List` lists templates.
+
+Finished mp4 files go to S3 (`S3_BUCKET`, optional `S3_PREFIX`, default
+`rendered-videos`). MySQL table `ie_rendered_videos` stores the video id
+with the template id. Set `MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`,
+`MYSQL_DATABASE`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and
+`AWS_DEFAULT_REGION` in the server `.env`. Names are in `.env.example`.
+Image templates stay on local disk.
 
 ```bash
 curl -X POST "http://localhost:8000/api" \
@@ -119,9 +129,14 @@ curl -X POST "http://localhost:8000/api" \
   -d '{"jsonrpc":"2.0","id":1,"method":"Template_Video_New","params":{"templateID":"<id>","name":"Hello","description":"","data":{"headline":"Ada"}}}'
 ```
 
-A shorter form is `http://localhost:8000/v/<id>?headline=Ada`. Timing lives on the template; the API only replaces the text. Video files are stored under `data/videos/<id>/`.
+A shorter form is `http://localhost:8000/v/<id>?headline=Ada`. The first request waits until encoding finishes and returns the mp4. The same URL later returns the stored file without encoding again. Timing lives on the template; the API only replaces the text. Video files are stored under `data/videos/<id>/`.
 
-Gunicorn’s timeout in `deploy/image_editor.service` is 300 seconds so a render can finish. If the service was installed earlier, update that unit and run `sudo systemctl daemon-reload && sudo systemctl restart image_editor`.
+`Template_Video_New` returns while ffmpeg runs in the background, so the HTTP call itself stays short. After pulling, install the new packages and restart only this app:
+
+```bash
+./venv/bin/pip install -r requirements.txt
+sudo systemctl restart image_editor
+```
 
 ## Storage
 

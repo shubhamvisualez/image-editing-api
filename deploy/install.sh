@@ -39,6 +39,8 @@ if [[ ! -f .env ]]; then
   sed -e 's|^# URL_PREFIX=/image-editor|URL_PREFIX=/image-editor|' \
       .env.example > .env
   chmod 600 .env
+elif ! grep -q '^URL_PREFIX=' .env; then
+  printf '\nURL_PREFIX=/image-editor\n' >> .env
 fi
 
 UNIT_TMP="$(mktemp)"

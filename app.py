@@ -7,9 +7,10 @@ values to an API endpoint.
 """
 import json
 import os
+import sys
 import tempfile
 
-from flask import Flask, abort, jsonify, render_template, request, send_file
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, send_file
 from PIL import Image
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -17,6 +18,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import pirsonal_api
 import render as renderer
 import store
+import video_catalog
 import video_render
 import video_store
 
@@ -100,7 +102,8 @@ def template_image(template_id):
 
 
 def public_base():
-    return request.url_root.rstrip("/") + (request.script_root or "")
+    # url_root already includes script_root (/image-editor). Do not append it again.
+    return request.url_root.rstrip("/")
 
 
 # ------------------------------------------------------------------ api ----
@@ -383,7 +386,8 @@ def api_video_render(video_id):
 
 @app.route("/v/<video_id>")
 def short_video_render(video_id):
-    return render_video_response(video_id, request.args.to_dict())
+    """First request encodes and returns the mp4. Later requests return the stored file."""
+    return render_video_file(video_id, request.args.to_dict())
 
 
 @app.route("/api", methods=["POST"])
@@ -397,25 +401,84 @@ def pirsonal_rpc():
 
 @app.route("/renders/<render_id>.mp4")
 def rendered_video(render_id):
+    try:
+        row = video_catalog.get(render_id)
+    except video_catalog.CatalogError:
+        row = None
+    if row and row.get("status") == "done" and row.get("s3_key"):
+        return _stream_stored_video(row)
     path = pirsonal_api.render_file(render_id)
     if not path:
         abort(404)
     return send_file(path, mimetype="video/mp4", conditional=True)
 
 
-def render_video_response(video_id, values):
+def _stream_stored_video(row):
+    range_header = request.headers.get("Range")
+    try:
+        obj = video_catalog.open_s3(row, range_header)
+    except video_catalog.CatalogError:
+        abort(404)
+    status = 206 if range_header else 200
+    headers = {
+        "Content-Type": "video/mp4",
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(obj["ContentLength"]),
+    }
+    if obj.get("ContentRange"):
+        headers["Content-Range"] = obj["ContentRange"]
+    return Response(obj["Body"].iter_chunks(256 * 1024), status=status, headers=headers)
+
+
+def render_video_file(video_id, values):
+    body, result = _start_video_render(video_id, values)
+    if body is None:
+        return result
+    code = (result.get("status") or {}).get("code")
+    render_id = result.get("id")
+    if code == "error":
+        return jsonify(error=(result.get("status") or {}).get("message") or "Render failed"), 500
+    try:
+        row = video_catalog.get(render_id) if code == "done" else video_catalog.wait_for(render_id)
+    except video_catalog.CatalogError as exc:
+        return jsonify(error=str(exc)), 500
+    if not row or row.get("status") != "done" or not row.get("s3_key"):
+        if row and row.get("status") == "processing":
+            return jsonify(error="Video is still processing. Open this link again in a moment."), 504
+        message = (row or {}).get("error_message") or "Render failed"
+        return jsonify(error=message), 500
+    return _stream_stored_video(row)
+
+
+def _start_video_render(video_id, values):
     try:
         record = video_store.get_video(video_id)
-        path = video_store.video_path(video_id)
     except video_store.VideoNotFound:
-        return jsonify(error="Video template not found."), 404
-    try:
-        data = video_render.render_video(record, path, values)
-    except video_render.VideoRenderError as exc:
-        return jsonify(error=str(exc)), 500
-    except Exception as exc:
-        return jsonify(error=f"Render failed: {exc}"), 500
-    return send_file(io_bytes(data), mimetype="video/mp4", download_name=f"{video_id}.mp4")
+        return None, (jsonify(error="Video template not found."), 404)
+    body = pirsonal_api.dispatch({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "Template_Video_New",
+        "params": {
+            "templateID": video_id,
+            "name": record.get("name") or "",
+            "description": "",
+            "data": values,
+        },
+    }, public_base())
+    result = body.get("result") or {}
+    if body.get("error"):
+        return None, (jsonify(error=body["error"].get("message") or "Render failed"), 500)
+    return body, result
+
+
+def render_video_response(video_id, values):
+    body, result = _start_video_render(video_id, values)
+    if body is None:
+        return result
+    if result.get("status", {}).get("code") == "done" and result.get("url"):
+        return redirect(result["url"])
+    return jsonify(result), 202
 
 
 def _cleanup_upload(video_path, poster_path):
@@ -443,6 +506,10 @@ def healthz():
         "status": "ok",
         "image_storage": "local",
         "ffmpeg": video_render.ffmpeg_available(),
+        "rendered_videos": {
+            "mysql": video_catalog.mysql_configured(),
+            "s3": video_catalog.s3_configured(),
+        },
     }
 
 
@@ -462,13 +529,26 @@ class ScriptPrefixMiddleware:
         return self.wsgi_app(environ, start_response)
 
 
-_prefix = os.environ.get("URL_PREFIX", "").strip()
-if _prefix and not _prefix.startswith("/"):
-    _prefix = "/" + _prefix
-_prefix = _prefix.rstrip("/")
+def _public_prefix():
+    """Path Apache mounts this app on.
+
+    Every generated link (CSS, JS, images, API, redirects) needs this prefix.
+    A blank or missing URL_PREFIX still uses /image-editor under gunicorn.
+    `python app.py` stays at the site root unless URL_PREFIX is set.
+    """
+    raw = (os.environ.get("URL_PREFIX") or "").strip()
+    if not raw and "gunicorn" in sys.modules:
+        raw = "/image-editor"
+    raw = raw.strip()
+    if raw and not raw.startswith("/"):
+        raw = "/" + raw
+    return raw.rstrip("/")
+
+
+_prefix = _public_prefix()
 if _prefix:
     app.wsgi_app = ScriptPrefixMiddleware(app.wsgi_app, _prefix)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 
 @app.errorhandler(HTTPException)

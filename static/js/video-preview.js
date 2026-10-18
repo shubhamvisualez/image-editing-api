@@ -23,8 +23,7 @@
     curlSnippet.textContent =
 `curl -X POST "${window.API_URL}" \\
   -H "Content-Type: application/json" \\
-  -d '${JSON.stringify(payload)}' \\
-  --output result.mp4`;
+  -d '${JSON.stringify(payload)}'`;
     const params = new URLSearchParams(values);
     shortUrlSnippet.textContent = `${window.SHORT_URL}?${params.toString()}`;
     const rpc = {
@@ -46,40 +45,74 @@
 
   form.addEventListener("input", renderSnippet);
 
+  async function rpc(method, params) {
+    const res = await fetch(window.RPC_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.error) {
+      throw new Error((body.error && body.error.message) || `Request failed (${res.status})`);
+    }
+    return body.result;
+  }
+
+  function showVideo(url) {
+    result.innerHTML = "";
+    const video = document.createElement("video");
+    video.src = url;
+    video.controls = true;
+    video.playsInline = true;
+    video.className = "result-video";
+    result.appendChild(video);
+    const actions = document.createElement("div");
+    actions.className = "result-actions";
+    const download = document.createElement("a");
+    download.className = "btn btn-sm";
+    download.href = url;
+    download.download = "render.mp4";
+    download.textContent = "Download mp4";
+    actions.appendChild(download);
+    result.appendChild(actions);
+  }
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const button = form.querySelector("button[type=submit]");
     button.disabled = true;
-    result.innerHTML = "<p class='muted'>Rendering video… this can take a little while.</p>";
+    result.innerHTML = "<p class='muted'>Starting render…</p>";
     try {
-      const res = await fetch(window.API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values: currentValues() }),
+      const created = await rpc("Template_Video_New", {
+        templateID: window.VIDEO.id,
+        name: window.VIDEO.name,
+        description: "",
+        data: currentValues(),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Render failed (${res.status})`);
+      if (created.status && created.status.code === "error") {
+        throw new Error(created.status.message || "Render failed");
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      if (created.status && created.status.code === "done" && created.url) {
+        showVideo(created.url);
+        return;
+      }
+      const note = document.createElement("p");
+      note.className = "muted";
+      note.textContent = `Processing video ${created.id}. This page will play it when the file is stored.`;
       result.innerHTML = "";
-      const video = document.createElement("video");
-      video.src = url;
-      video.controls = true;
-      video.playsInline = true;
-      video.className = "result-video";
-      result.appendChild(video);
-      const actions = document.createElement("div");
-      actions.className = "result-actions";
-      const download = document.createElement("a");
-      download.className = "btn btn-sm";
-      download.href = url;
-      download.download = "render.mp4";
-      download.textContent = "Download mp4";
-      actions.appendChild(download);
-      result.appendChild(actions);
-      video.play().catch(() => {});
+      result.appendChild(note);
+      for (let attempt = 0; attempt < 180; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const current = await rpc("Video_Get", { id: created.id });
+        const code = current.status && current.status.code;
+        if (code === "done" && current.url) {
+          showVideo(current.url);
+          return;
+        }
+        if (code === "error") throw new Error(current.status.message || "Render failed");
+        note.textContent = `Processing video ${created.id}…`;
+      }
+      throw new Error(`Still processing. Ask Video_Get for id ${created.id}.`);
     } catch (err) {
       result.innerHTML = "";
       const message = document.createElement("p");
