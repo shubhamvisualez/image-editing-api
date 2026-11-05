@@ -36,13 +36,65 @@
         <div id="text-toolbar" class="text-toolbar" hidden>
           <select id="tb-font" title="Font"></select>
           <input id="tb-size" type="number" min="4" max="500" step="1" title="Font size" class="tb-size">
-          <input id="tb-color" type="color" title="Color" class="tb-color">
-          <div class="tb-align-group" role="group" aria-label="Text align">
-            <button type="button" class="tb-align-btn" data-align="left" title="Align left">L</button>
-            <button type="button" class="tb-align-btn" data-align="center" title="Align center">C</button>
-            <button type="button" class="tb-align-btn" data-align="right" title="Align right">R</button>
+          <label class="tb-color-picker" title="Text color">
+            <input id="tb-color" type="color" title="Text color" class="tb-color">
+          </label>
+          <div class="tb-sep"></div>
+          <div class="tb-style-group" role="group" aria-label="Text styles">
+            <button type="button" id="tb-bold" class="tb-toggle-btn" title="Bold"><b>B</b></button>
+            <button type="button" id="tb-italic" class="tb-toggle-btn" title="Italic"><i>I</i></button>
+            <button type="button" id="tb-underline" class="tb-toggle-btn" title="Underline"><u>U</u></button>
+            <button type="button" id="tb-strike" class="tb-toggle-btn" title="Strikethrough"><s>S</s></button>
+            <button type="button" id="tb-case" class="tb-toggle-btn" title="Uppercase (ALL CAPS)">aA</button>
           </div>
+          <div class="tb-sep"></div>
+          <div class="tb-align-group" role="group" aria-label="Text align">
+            <button type="button" class="tb-align-btn" data-align="left" title="Align left">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+            </button>
+            <button type="button" class="tb-align-btn" data-align="center" title="Align center">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+            </button>
+            <button type="button" class="tb-align-btn" data-align="right" title="Align right">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="tb-sep"></div>
+          <button type="button" id="tb-more" class="tb-icon-btn" title="More options (spacing, outline, highlight, opacity)">⚙</button>
           <button type="button" id="tb-delete" class="tb-icon-btn tb-danger" title="Delete">✕</button>
+
+          <div id="tb-more-panel" class="tb-more-panel" hidden>
+            <div class="tb-more-row">
+              <span class="tb-more-label">Line height</span>
+              <input id="tb-line-height" type="number" min="0.8" max="3.0" step="0.1" value="1.2" class="tb-number-sm">
+            </div>
+            <div class="tb-more-row">
+              <span class="tb-more-label">Letter spacing</span>
+              <input id="tb-letter-spacing" type="number" min="-5" max="50" step="1" value="0" class="tb-number-sm">
+            </div>
+            <div class="tb-more-row">
+              <span class="tb-more-label">Highlight / Bg</span>
+              <div class="tb-color-row">
+                <input id="tb-bg-color" type="color" class="tb-color-input" value="#000000">
+                <button type="button" id="tb-bg-clear" class="btn btn-sm tb-clear-btn" title="Transparent background">None</button>
+              </div>
+            </div>
+            <div class="tb-more-row">
+              <span class="tb-more-label">Outline stroke</span>
+              <div class="tb-color-row">
+                <input id="tb-stroke-width" type="number" min="0" max="20" step="1" value="0" class="tb-number-sm" title="Outline width">
+                <input id="tb-stroke-color" type="color" class="tb-color-input" value="#000000" title="Outline color">
+                <button type="button" id="tb-stroke-clear" class="btn btn-sm tb-clear-btn" title="No outline">None</button>
+              </div>
+            </div>
+            <div class="tb-more-row">
+              <span class="tb-more-label">Opacity</span>
+              <div class="tb-slider-row">
+                <input id="tb-opacity" type="range" min="10" max="100" step="5" value="100" class="tb-range">
+                <span id="tb-opacity-val" class="tb-val-badge">100%</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <p class="hint">
@@ -58,6 +110,67 @@
       <label id="label-fields" class="name-field" hidden>Variable name
         <input id="field-label" type="text" autocomplete="off" spellcheck="false" placeholder="headline">
       </label>
+
+      <div id="props-panel" class="inspector-section" hidden>
+        <h3 class="inspector-heading">Typography & Style</h3>
+        <label class="inspector-field">Font family
+          <select id="insp-font" class="insp-input"></select>
+        </label>
+        <div class="inspector-row-2">
+          <label class="inspector-field">Size (px)
+            <input id="insp-size" type="number" min="4" max="500" step="1" class="insp-input">
+          </label>
+          <label class="inspector-field">Color
+            <div class="insp-color-wrap">
+              <input id="insp-color" type="color" class="insp-color">
+              <span id="insp-color-text" class="insp-color-val">#000000</span>
+            </div>
+          </label>
+        </div>
+        <div class="inspector-field">
+          <span>Format</span>
+          <div class="insp-btn-group">
+            <button type="button" id="insp-bold" class="insp-btn" title="Bold"><b>B</b></button>
+            <button type="button" id="insp-italic" class="insp-btn" title="Italic"><i>I</i></button>
+            <button type="button" id="insp-underline" class="insp-btn" title="Underline"><u>U</u></button>
+            <button type="button" id="insp-strike" class="insp-btn" title="Strikethrough"><s>S</s></button>
+            <button type="button" id="insp-case" class="insp-btn" title="Uppercase">aA</button>
+          </div>
+        </div>
+        <div class="inspector-field">
+          <span>Alignment</span>
+          <div class="insp-btn-group">
+            <button type="button" class="insp-align-btn" data-align="left" title="Left">Left</button>
+            <button type="button" class="insp-align-btn" data-align="center" title="Center">Center</button>
+            <button type="button" class="insp-align-btn" data-align="right" title="Right">Right</button>
+          </div>
+        </div>
+        <div class="inspector-row-2">
+          <label class="inspector-field">Line height
+            <input id="insp-line-height" type="number" min="0.8" max="3.0" step="0.1" class="insp-input">
+          </label>
+          <label class="inspector-field">Letter spacing
+            <input id="insp-letter-spacing" type="number" min="-5" max="50" step="1" class="insp-input">
+          </label>
+        </div>
+        <label class="inspector-field">Highlight / Background
+          <div class="insp-color-row">
+            <input id="insp-bg-color" type="color" class="insp-color">
+            <button type="button" id="insp-bg-clear" class="btn btn-sm">Clear</button>
+          </div>
+        </label>
+        <div class="inspector-field">
+          <span>Outline Stroke</span>
+          <div class="insp-stroke-row">
+            <input id="insp-stroke-width" type="number" min="0" max="20" step="1" placeholder="0" class="insp-input insp-stroke-w" title="Width">
+            <input id="insp-stroke-color" type="color" class="insp-color" title="Color">
+            <button type="button" id="insp-stroke-clear" class="btn btn-sm">Clear</button>
+          </div>
+        </div>
+        <label class="inspector-field">Opacity: <span id="insp-opacity-val">100%</span>
+          <input id="insp-opacity" type="range" min="10" max="100" step="5" class="insp-range">
+        </label>
+      </div>
       {% if not template %}
         <p class="muted small">Upload an image to start adding text.</p>
       {% endif %}

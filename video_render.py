@@ -84,25 +84,7 @@ def write_poster(video_path, dest_path):
 
 def _draw_text(width, height, var, text):
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-    font = image_render.get_font(var.get("font", "roboto"), var["font_size"])
-    color = var.get("color", "#ffffff")
-    align = var.get("align", "left")
-    max_width = var.get("width")
-    line_height_mult = var.get("line_height", 1.2)
-    lines = image_render._wrap_text(draw, text, font, max_width)
-    ascent, descent = font.getmetrics()
-    line_height = int((ascent + descent) * line_height_mult)
-    x0, y0 = var["x"], var["y"]
-    for index, line in enumerate(lines):
-        line_width = draw.textlength(line, font=font)
-        if align == "center":
-            lx = x0 + ((max_width or line_width) - line_width) / 2
-        elif align == "right":
-            lx = x0 + (max_width or line_width) - line_width
-        else:
-            lx = x0
-        draw.text((lx, y0 + index * line_height), line, font=font, fill=color)
+    image_render.draw_text_variable(overlay, var, text)
     return overlay
 
 
@@ -113,8 +95,14 @@ def render_video(record, video_path, values):
     width = int(record["width"])
     height = int(record["height"])
     layers = []
-    for var in record.get("variables") or []:
-        text = str(values.get(var["label"], var.get("default_text", "")))
+    for raw_var in record.get("variables") or []:
+        var = dict(raw_var)
+        val = values.get(var["label"], var.get("default_text", ""))
+        if isinstance(val, dict):
+            text = str(val.get("text", val.get("value", var.get("default_text", ""))))
+            var.update(val)
+        else:
+            text = str(val)
         if text == "":
             continue
         start = float(var.get("start") or 0)

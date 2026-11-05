@@ -33,6 +33,22 @@
     tbFont: el("tb-font"),
     tbSize: el("tb-size"),
     tbColor: el("tb-color"),
+    tbBold: el("tb-bold"),
+    tbItalic: el("tb-italic"),
+    tbUnderline: el("tb-underline"),
+    tbStrike: el("tb-strike"),
+    tbCase: el("tb-case"),
+    tbMore: el("tb-more"),
+    tbMorePanel: el("tb-more-panel"),
+    tbLineHeight: el("tb-line-height"),
+    tbLetterSpacing: el("tb-letter-spacing"),
+    tbBgColor: el("tb-bg-color"),
+    tbBgClear: el("tb-bg-clear"),
+    tbStrokeWidth: el("tb-stroke-width"),
+    tbStrokeColor: el("tb-stroke-color"),
+    tbStrokeClear: el("tb-stroke-clear"),
+    tbOpacity: el("tb-opacity"),
+    tbOpacityVal: el("tb-opacity-val"),
     tbDelete: el("tb-delete"),
     timeline: el("timeline"),
     ruler: el("timeline-ruler"),
@@ -46,6 +62,26 @@
     labelFields: el("label-fields"),
     fieldLabel: el("field-label"),
     scroll: el("timeline-scroll"),
+
+    propsPanel: el("props-panel"),
+    inspFont: el("insp-font"),
+    inspSize: el("insp-size"),
+    inspColor: el("insp-color"),
+    inspColorText: el("insp-color-text"),
+    inspBold: el("insp-bold"),
+    inspItalic: el("insp-italic"),
+    inspUnderline: el("insp-underline"),
+    inspStrike: el("insp-strike"),
+    inspCase: el("insp-case"),
+    inspLineHeight: el("insp-line-height"),
+    inspLetterSpacing: el("insp-letter-spacing"),
+    inspBgColor: el("insp-bg-color"),
+    inspBgClear: el("insp-bg-clear"),
+    inspStrokeWidth: el("insp-stroke-width"),
+    inspStrokeColor: el("insp-stroke-color"),
+    inspStrokeClear: el("insp-stroke-clear"),
+    inspOpacity: el("insp-opacity"),
+    inspOpacityVal: el("insp-opacity-val"),
   };
 
   function fontFamilyFor(slug) {
@@ -71,6 +107,7 @@
   }
 
   function populateFontSelect(select) {
+    if (!select) return;
     select.innerHTML = window.FONTS.map((f) => {
       const slug = f.file.replace(/\.ttf$/, "");
       return `<option value="${slug}">${f.name}</option>`;
@@ -112,6 +149,16 @@
       font: window.FONTS.length ? window.FONTS[0].file.replace(/\.ttf$/, "") : "roboto",
       default_text: label,
       line_height: 1.2,
+      bold: false,
+      italic: false,
+      underline: false,
+      strikethrough: false,
+      uppercase: false,
+      letter_spacing: 0,
+      bg_color: "",
+      stroke_color: "",
+      stroke_width: 0,
+      opacity: 1.0,
       start: round3(start),
       end: round3(Math.max(start + MIN_SPAN, end)),
     };
@@ -172,6 +219,19 @@
 
   function loadExisting(record) {
     state.variables = JSON.parse(JSON.stringify(record.variables));
+    state.variables.forEach((v) => {
+      v.bold = Boolean(v.bold);
+      v.italic = Boolean(v.italic);
+      v.underline = Boolean(v.underline);
+      v.strikethrough = Boolean(v.strikethrough);
+      v.uppercase = Boolean(v.uppercase);
+      v.letter_spacing = Number(v.letter_spacing) || 0;
+      v.line_height = Number(v.line_height) || 1.2;
+      v.bg_color = v.bg_color || "";
+      v.stroke_color = v.stroke_color || "";
+      v.stroke_width = Number(v.stroke_width) || 0;
+      v.opacity = v.opacity !== undefined ? Number(v.opacity) : 1.0;
+    });
     state.naturalWidth = record.width;
     state.naturalHeight = record.height;
     state.duration = record.duration || 0;
@@ -214,6 +274,49 @@
     hideToolbar();
   }
 
+  function applyBoxStyles(box, textDiv, v) {
+    box.style.left = v.x * state.scale + "px";
+    box.style.top = v.y * state.scale + "px";
+    box.style.width = v.width * state.scale + "px";
+    box.style.fontFamily = `"${fontFamilyFor(v.font)}"`;
+    box.style.fontSize = Math.max(6, v.font_size * state.scale) + "px";
+    box.style.color = v.color;
+    box.style.textAlign = v.align;
+    box.style.fontWeight = v.bold ? "bold" : "normal";
+    box.style.fontStyle = v.italic ? "italic" : "normal";
+
+    const deco = [];
+    if (v.underline) deco.push("underline");
+    if (v.strikethrough) deco.push("line-through");
+    box.style.textDecoration = deco.length ? deco.join(" ") : "none";
+
+    box.style.textTransform = v.uppercase ? "uppercase" : "none";
+    box.style.lineHeight = v.line_height || 1.2;
+    box.style.letterSpacing = ((v.letter_spacing || 0) * state.scale) + "px";
+    box.style.opacity = v.opacity !== undefined ? v.opacity : 1.0;
+
+    if (textDiv) {
+      if (v.bg_color) {
+        textDiv.style.backgroundColor = v.bg_color;
+        textDiv.style.padding = "2px 6px";
+        textDiv.style.borderRadius = "4px";
+      } else {
+        textDiv.style.backgroundColor = "transparent";
+        textDiv.style.padding = "0";
+        textDiv.style.borderRadius = "0";
+      }
+
+      if (v.stroke_color && v.stroke_width > 0) {
+        const sw = Math.max(0.5, v.stroke_width * state.scale);
+        textDiv.style.webkitTextStroke = `${sw}px ${v.stroke_color}`;
+        textDiv.style.paintOrder = "stroke fill";
+      } else {
+        textDiv.style.webkitTextStroke = "";
+        textDiv.style.paintOrder = "";
+      }
+    }
+  }
+
   function renderBoxes() {
     els.boxesLayer.innerHTML = "";
     state.variables.forEach((v, i) => {
@@ -221,19 +324,13 @@
       const visible = i === state.selectedIndex || isActive(v, state.currentTime);
       box.className = "var-box" + (i === state.selectedIndex ? " selected" : "");
       box.style.display = visible ? "" : "none";
-      box.style.left = v.x * state.scale + "px";
-      box.style.top = v.y * state.scale + "px";
-      box.style.width = v.width * state.scale + "px";
-      box.style.fontFamily = `"${fontFamilyFor(v.font)}"`;
-      box.style.fontSize = Math.max(6, v.font_size * state.scale) + "px";
-      box.style.color = v.color;
-      box.style.textAlign = v.align;
-      box.style.lineHeight = v.line_height || 1.2;
 
       const textDiv = document.createElement("div");
       textDiv.className = "var-box-text";
       textDiv.textContent = v.default_text || v.label;
       box.appendChild(textDiv);
+
+      applyBoxStyles(box, textDiv, v);
 
       const tag = document.createElement("span");
       tag.className = "box-label-tag";
@@ -255,20 +352,17 @@
         e.stopPropagation();
         startLabelRename(i, tag);
       });
+
       textDiv.addEventListener("dblclick", (e) => {
         e.stopPropagation();
         enterTextEditMode(i);
       });
       textDiv.addEventListener("blur", () => exitTextEditMode(i));
       textDiv.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          textDiv.blur();
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          textDiv.blur();
-        }
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); textDiv.blur(); }
+        else if (e.key === "Escape") { e.preventDefault(); textDiv.blur(); }
       });
+
       els.boxesLayer.appendChild(box);
     });
   }
@@ -277,138 +371,132 @@
     els.varList.innerHTML = "";
     if (!state.variables.length) {
       els.varList.innerHTML = '<p class="muted small">No text yet.</p>';
-      els.timeFields.hidden = true;
+      syncTimeFields();
       syncLabelField();
+      syncInspectorProps();
       return;
     }
     state.variables.forEach((v, i) => {
       const item = document.createElement("div");
       item.className = "var-list-item" + (i === state.selectedIndex ? " selected" : "");
       const color = /^#[0-9a-fA-F]{3,8}$/.test(v.color || "") ? v.color : "#ffffff";
-      item.innerHTML = `<span class="swatch" style="background:${color}"></span><code>${escapeHtml(v.label)}</code><span class="muted small">${v.start.toFixed(1)}–${v.end.toFixed(1)}s</span>`;
-      item.addEventListener("click", () => {
+      item.innerHTML = `<span class="swatch" style="background:${color}"></span><code>${escapeHtml(v.label)}</code><span class="muted small">${v.start.toFixed(1)}–${v.end.toFixed(1)}s</span><button type="button" class="var-list-delete" title="Delete">✕</button>`;
+      item.addEventListener("click", (e) => {
+        if (e.target.closest(".var-list-delete")) return;
         commitActiveEdit();
-        selectVariable(i);
         seekTo(v.start);
+        selectVariable(i);
         positionToolbar(i);
         showToolbar();
+      });
+      item.querySelector(".var-list-delete").addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteVariable(i);
       });
       els.varList.appendChild(item);
     });
     syncTimeFields();
     syncLabelField();
+    syncInspectorProps();
   }
 
   function renderTimeline() {
-    const duration = state.duration || 1;
+    renderRuler();
+    renderTracks();
+    updatePlayhead();
+  }
+
+  function pxPerSec() {
+    const totalW = Math.max(els.scroll.clientWidth, 400);
+    const dur = Math.max(state.duration, 1);
+    return Math.max(40, (totalW - 20) / dur);
+  }
+
+  function renderRuler() {
+    const dur = state.duration || 10;
+    const pps = pxPerSec();
+    const totalW = dur * pps;
+    els.ruler.style.width = totalW + "px";
+    els.tracks.style.width = totalW + "px";
     els.ruler.innerHTML = "";
-    const steps = Math.min(12, Math.max(2, Math.round(duration)));
-    for (let i = 0; i <= steps; i += 1) {
-      const t = (duration * i) / steps;
-      const mark = document.createElement("span");
-      mark.className = "ruler-mark";
-      mark.style.left = (t / duration) * 100 + "%";
-      mark.textContent = fmt(t);
-      els.ruler.appendChild(mark);
+
+    const step = dur > 60 ? 10 : dur > 20 ? 5 : dur > 5 ? 1 : 0.5;
+    for (let t = 0; t <= dur + 0.001; t += step) {
+      const tick = document.createElement("div");
+      tick.className = "timeline-tick";
+      tick.style.left = t * pps + "px";
+      const lbl = document.createElement("span");
+      lbl.textContent = fmt(t);
+      tick.appendChild(lbl);
+      els.ruler.appendChild(tick);
     }
+  }
+
+  function renderTracks() {
     els.tracks.innerHTML = "";
+    const pps = pxPerSec();
     state.variables.forEach((v, i) => {
       const row = document.createElement("div");
       row.className = "timeline-row" + (i === state.selectedIndex ? " selected" : "");
+
       const bar = document.createElement("div");
       bar.className = "timeline-bar";
-      bar.style.left = (v.start / duration) * 100 + "%";
-      bar.style.width = ((v.end - v.start) / duration) * 100 + "%";
-      bar.innerHTML = `<span class="bar-handle left"></span><span class="bar-label">${escapeHtml(v.label)}</span><span class="bar-handle right"></span>`;
-      bar.addEventListener("mousedown", (e) => {
-        if (e.target.classList.contains("bar-handle")) return;
-        startBarDrag(e, i, "move");
-      });
-      bar.querySelector(".left").addEventListener("mousedown", (e) => {
+      const left = v.start * pps;
+      const width = Math.max(8, (v.end - v.start) * pps);
+      bar.style.left = left + "px";
+      bar.style.width = width + "px";
+
+      const labelSpan = document.createElement("span");
+      labelSpan.className = "timeline-bar-label";
+      labelSpan.textContent = v.label;
+      bar.appendChild(labelSpan);
+
+      const hLeft = document.createElement("div");
+      hLeft.className = "timeline-bar-handle handle-left";
+      const hRight = document.createElement("div");
+      hRight.className = "timeline-bar-handle handle-right";
+      bar.appendChild(hLeft);
+      bar.appendChild(hRight);
+
+      bar.addEventListener("mousedown", (e) => onBarMouseDown(e, i));
+      hLeft.addEventListener("mousedown", (e) => {
         e.stopPropagation();
-        startBarDrag(e, i, "start");
+        startBarTrim(e, i, "start");
       });
-      bar.querySelector(".right").addEventListener("mousedown", (e) => {
+      hRight.addEventListener("mousedown", (e) => {
         e.stopPropagation();
-        startBarDrag(e, i, "end");
+        startBarTrim(e, i, "end");
       });
+
       row.appendChild(bar);
-      row.addEventListener("mousedown", (e) => {
-        if (e.target.closest(".timeline-bar")) return;
-        const rect = els.tracks.getBoundingClientRect();
-        seekTo(((e.clientX - rect.left) / rect.width) * duration);
-      });
       els.tracks.appendChild(row);
     });
-    movePlayhead();
   }
 
-  function startBarDrag(e, i, mode) {
-    e.preventDefault();
-    commitActiveEdit();
-    selectVariable(i);
-    const v = state.variables[i];
-    const origin = e.clientX;
-    const start0 = v.start;
-    const end0 = v.end;
-    const width = els.tracks.getBoundingClientRect().width || 1;
-    function onMove(ev) {
-      const delta = ((ev.clientX - origin) / width) * state.duration;
-      if (mode === "move") {
-        let start = start0 + delta;
-        let end = end0 + delta;
-        const span = end0 - start0;
-        if (start < 0) { start = 0; end = span; }
-        if (end > state.duration) { end = state.duration; start = end - span; }
-        v.start = round3(Math.max(0, start));
-        v.end = round3(Math.min(state.duration, end));
-      } else if (mode === "start") {
-        v.start = round3(Math.max(0, Math.min(start0 + delta, v.end - MIN_SPAN)));
-      } else {
-        v.end = round3(Math.min(state.duration, Math.max(end0 + delta, v.start + MIN_SPAN)));
-      }
-      renderTimeline();
-      renderBoxes();
-      syncTimeFields();
-      renderVarList();
-    }
-    function onUp() {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    }
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }
-
-  function movePlayhead() {
-    const duration = state.duration || 1;
-    els.playhead.style.left = (state.currentTime / duration) * 100 + "%";
+  function updatePlayhead() {
+    const pps = pxPerSec();
+    els.playhead.style.left = state.currentTime * pps + "px";
   }
 
   function updateReadout() {
     els.readout.textContent = `${fmt(state.currentTime)} / ${fmt(state.duration)}`;
-    els.playBtn.textContent = els.video.paused ? "Play" : "Pause";
   }
 
   function seekTo(time) {
-    const next = Math.max(0, Math.min(time, state.duration || time));
-    state.currentTime = next;
-    if (els.video.readyState >= 1) {
-      try { els.video.currentTime = next; } catch (err) { /* not seekable yet */ }
-    }
-    movePlayhead();
+    state.currentTime = Math.max(0, Math.min(state.duration, time));
+    els.video.currentTime = state.currentTime;
+    updatePlayhead();
     updateReadout();
-    renderBoxes();
+    updateSelectionClasses();
+    if (state.selectedIndex !== null) positionToolbar(state.selectedIndex);
   }
 
   function syncTimeFields() {
     const v = currentSelected();
     els.timeFields.hidden = !v;
     if (!v) return;
-    if (document.activeElement !== els.fieldStart) els.fieldStart.value = v.start;
-    if (document.activeElement !== els.fieldEnd) els.fieldEnd.value = v.end;
-    els.fieldStart.max = state.duration || "";
-    els.fieldEnd.max = state.duration || "";
+    if (document.activeElement !== els.fieldStart) els.fieldStart.value = v.start.toFixed(2);
+    if (document.activeElement !== els.fieldEnd) els.fieldEnd.value = v.end.toFixed(2);
   }
 
   function escapeHtml(s) {
@@ -422,6 +510,7 @@
     updateSelectionClasses();
     syncTimeFields();
     syncLabelField();
+    syncInspectorProps();
   }
 
   function deselectAll() {
@@ -430,6 +519,7 @@
     hideToolbar();
     syncTimeFields();
     syncLabelField();
+    syncInspectorProps();
   }
 
   function syncLabelField() {
@@ -488,6 +578,7 @@
     state.variables.splice(i, 1);
     state.selectedIndex = null;
     renderAll();
+    syncInspectorProps();
   }
 
   function commitActiveEdit() {
@@ -574,38 +665,192 @@
 
   function bindToolbarEvents() {
     populateFontSelect(els.tbFont);
-    els.tbFont.addEventListener("change", () => {
+    if (els.inspFont) populateFontSelect(els.inspFont);
+
+    function updateFont(val) {
       const v = currentSelected();
       if (!v) return;
-      v.font = els.tbFont.value;
+      v.font = val;
+      if (els.tbFont) els.tbFont.value = val;
+      if (els.inspFont) els.inspFont.value = val;
       refreshBoxStyle(state.selectedIndex);
-    });
-    els.tbSize.addEventListener("input", () => {
+    }
+    els.tbFont.addEventListener("change", () => updateFont(els.tbFont.value));
+    if (els.inspFont) els.inspFont.addEventListener("change", () => updateFont(els.inspFont.value));
+
+    function updateSize(val) {
       const v = currentSelected();
       if (!v) return;
-      v.font_size = Number(els.tbSize.value) || 1;
-      refreshBoxStyle(state.selectedIndex);
-    });
-    els.tbColor.addEventListener("input", () => {
-      const v = currentSelected();
-      if (!v) return;
-      v.color = els.tbColor.value;
+      v.font_size = Number(val) || 1;
+      if (els.tbSize) els.tbSize.value = v.font_size;
+      if (els.inspSize) els.inspSize.value = v.font_size;
       refreshBoxStyle(state.selectedIndex);
       renderVarList();
-    });
+    }
+    els.tbSize.addEventListener("input", () => updateSize(els.tbSize.value));
+    if (els.inspSize) els.inspSize.addEventListener("input", () => updateSize(els.inspSize.value));
+
+    function updateColor(val) {
+      const v = currentSelected();
+      if (!v) return;
+      v.color = val;
+      if (els.tbColor) els.tbColor.value = val;
+      if (els.inspColor) els.inspColor.value = val;
+      if (els.inspColorText) els.inspColorText.textContent = val;
+      refreshBoxStyle(state.selectedIndex);
+      renderVarList();
+    }
+    els.tbColor.addEventListener("input", () => updateColor(els.tbColor.value));
+    if (els.inspColor) els.inspColor.addEventListener("input", () => updateColor(els.inspColor.value));
+
+    // Format toggles
+    function toggleProp(prop, tbBtn, inspBtn) {
+      const v = currentSelected();
+      if (!v) return;
+      v[prop] = !v[prop];
+      if (tbBtn) tbBtn.classList.toggle("active", Boolean(v[prop]));
+      if (inspBtn) inspBtn.classList.toggle("active", Boolean(v[prop]));
+      refreshBoxStyle(state.selectedIndex);
+    }
+
+    if (els.tbBold) els.tbBold.addEventListener("click", () => toggleProp("bold", els.tbBold, els.inspBold));
+    if (els.inspBold) els.inspBold.addEventListener("click", () => toggleProp("bold", els.tbBold, els.inspBold));
+
+    if (els.tbItalic) els.tbItalic.addEventListener("click", () => toggleProp("italic", els.tbItalic, els.inspItalic));
+    if (els.inspItalic) els.inspItalic.addEventListener("click", () => toggleProp("italic", els.tbItalic, els.inspItalic));
+
+    if (els.tbUnderline) els.tbUnderline.addEventListener("click", () => toggleProp("underline", els.tbUnderline, els.inspUnderline));
+    if (els.inspUnderline) els.inspUnderline.addEventListener("click", () => toggleProp("underline", els.tbUnderline, els.inspUnderline));
+
+    if (els.tbStrike) els.tbStrike.addEventListener("click", () => toggleProp("strikethrough", els.tbStrike, els.inspStrike));
+    if (els.inspStrike) els.inspStrike.addEventListener("click", () => toggleProp("strikethrough", els.tbStrike, els.inspStrike));
+
+    if (els.tbCase) els.tbCase.addEventListener("click", () => toggleProp("uppercase", els.tbCase, els.inspCase));
+    if (els.inspCase) els.inspCase.addEventListener("click", () => toggleProp("uppercase", els.tbCase, els.inspCase));
+
+    // Align
+    function setAlign(align) {
+      const v = currentSelected();
+      if (!v) return;
+      v.align = align;
+      refreshBoxStyle(state.selectedIndex);
+      updateAlignButtons(v.align);
+    }
     els.toolbar.querySelectorAll(".tb-align-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const v = currentSelected();
-        if (!v) return;
-        v.align = btn.dataset.align;
-        refreshBoxStyle(state.selectedIndex);
-        updateAlignButtons(v.align);
-      });
+      btn.addEventListener("click", () => setAlign(btn.dataset.align));
     });
+    if (els.propsPanel) {
+      els.propsPanel.querySelectorAll(".insp-align-btn").forEach((btn) => {
+        btn.addEventListener("click", () => setAlign(btn.dataset.align));
+      });
+    }
+
+    // More options popup
+    if (els.tbMore) {
+      els.tbMore.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (els.tbMorePanel) els.tbMorePanel.hidden = !els.tbMorePanel.hidden;
+      });
+    }
+    if (els.tbMorePanel) {
+      els.tbMorePanel.addEventListener("mousedown", (e) => e.stopPropagation());
+    }
+
+    // Line height
+    function updateLineHeight(val) {
+      const v = currentSelected();
+      if (!v) return;
+      v.line_height = Math.max(0.5, Math.min(4.0, parseFloat(val) || 1.2));
+      if (els.tbLineHeight) els.tbLineHeight.value = v.line_height;
+      if (els.inspLineHeight) els.inspLineHeight.value = v.line_height;
+      refreshBoxStyle(state.selectedIndex);
+    }
+    if (els.tbLineHeight) els.tbLineHeight.addEventListener("input", () => updateLineHeight(els.tbLineHeight.value));
+    if (els.inspLineHeight) els.inspLineHeight.addEventListener("input", () => updateLineHeight(els.inspLineHeight.value));
+
+    // Letter spacing
+    function updateLetterSpacing(val) {
+      const v = currentSelected();
+      if (!v) return;
+      v.letter_spacing = parseFloat(val) || 0;
+      if (els.tbLetterSpacing) els.tbLetterSpacing.value = v.letter_spacing;
+      if (els.inspLetterSpacing) els.inspLetterSpacing.value = v.letter_spacing;
+      refreshBoxStyle(state.selectedIndex);
+    }
+    if (els.tbLetterSpacing) els.tbLetterSpacing.addEventListener("input", () => updateLetterSpacing(els.tbLetterSpacing.value));
+    if (els.inspLetterSpacing) els.inspLetterSpacing.addEventListener("input", () => updateLetterSpacing(els.inspLetterSpacing.value));
+
+    // Background color
+    function updateBgColor(val) {
+      const v = currentSelected();
+      if (!v) return;
+      v.bg_color = val;
+      if (els.tbBgColor) els.tbBgColor.value = val || "#ffffff";
+      if (els.inspBgColor) els.inspBgColor.value = val || "#ffffff";
+      refreshBoxStyle(state.selectedIndex);
+    }
+    if (els.tbBgColor) els.tbBgColor.addEventListener("input", () => updateBgColor(els.tbBgColor.value));
+    if (els.inspBgColor) els.inspBgColor.addEventListener("input", () => updateBgColor(els.inspBgColor.value));
+    if (els.tbBgClear) els.tbBgClear.addEventListener("click", () => updateBgColor(""));
+    if (els.inspBgClear) els.inspBgClear.addEventListener("click", () => updateBgColor(""));
+
+    // Stroke width and color
+    function updateStrokeWidth(val) {
+      const v = currentSelected();
+      if (!v) return;
+      v.stroke_width = Math.max(0, parseFloat(val) || 0);
+      if (v.stroke_width > 0 && !v.stroke_color) v.stroke_color = "#000000";
+      if (els.tbStrokeWidth) els.tbStrokeWidth.value = v.stroke_width;
+      if (els.inspStrokeWidth) els.inspStrokeWidth.value = v.stroke_width;
+      refreshBoxStyle(state.selectedIndex);
+    }
+    function updateStrokeColor(val) {
+      const v = currentSelected();
+      if (!v) return;
+      v.stroke_color = val;
+      if (v.stroke_width === 0) v.stroke_width = 1;
+      if (els.tbStrokeColor) els.tbStrokeColor.value = val;
+      if (els.inspStrokeColor) els.inspStrokeColor.value = val;
+      if (els.tbStrokeWidth) els.tbStrokeWidth.value = v.stroke_width;
+      if (els.inspStrokeWidth) els.inspStrokeWidth.value = v.stroke_width;
+      refreshBoxStyle(state.selectedIndex);
+    }
+    function clearStroke() {
+      const v = currentSelected();
+      if (!v) return;
+      v.stroke_width = 0;
+      v.stroke_color = "";
+      if (els.tbStrokeWidth) els.tbStrokeWidth.value = 0;
+      if (els.inspStrokeWidth) els.inspStrokeWidth.value = 0;
+      refreshBoxStyle(state.selectedIndex);
+    }
+    if (els.tbStrokeWidth) els.tbStrokeWidth.addEventListener("input", () => updateStrokeWidth(els.tbStrokeWidth.value));
+    if (els.inspStrokeWidth) els.inspStrokeWidth.addEventListener("input", () => updateStrokeWidth(els.inspStrokeWidth.value));
+    if (els.tbStrokeColor) els.tbStrokeColor.addEventListener("input", () => updateStrokeColor(els.tbStrokeColor.value));
+    if (els.inspStrokeColor) els.inspStrokeColor.addEventListener("input", () => updateStrokeColor(els.inspStrokeColor.value));
+    if (els.tbStrokeClear) els.tbStrokeClear.addEventListener("click", clearStroke);
+    if (els.inspStrokeClear) els.inspStrokeClear.addEventListener("click", clearStroke);
+
+    // Opacity
+    function updateOpacity(val) {
+      const v = currentSelected();
+      if (!v) return;
+      const pct = parseInt(val, 10) || 100;
+      v.opacity = Math.max(0.05, Math.min(1.0, pct / 100));
+      if (els.tbOpacity) els.tbOpacity.value = pct;
+      if (els.tbOpacityVal) els.tbOpacityVal.textContent = pct + "%";
+      if (els.inspOpacity) els.inspOpacity.value = pct;
+      if (els.inspOpacityVal) els.inspOpacityVal.textContent = pct + "%";
+      refreshBoxStyle(state.selectedIndex);
+    }
+    if (els.tbOpacity) els.tbOpacity.addEventListener("input", () => updateOpacity(els.tbOpacity.value));
+    if (els.inspOpacity) els.inspOpacity.addEventListener("input", () => updateOpacity(els.inspOpacity.value));
+
     els.tbDelete.addEventListener("click", () => {
       if (state.selectedIndex === null) return;
       deleteVariable(state.selectedIndex);
     });
+
     function applyTime(field) {
       const v = currentSelected();
       if (!v) return;
@@ -629,20 +874,53 @@
     const box = els.boxesLayer.children[i];
     const v = state.variables[i];
     if (!box || !v) return;
-    box.style.left = v.x * state.scale + "px";
-    box.style.top = v.y * state.scale + "px";
-    box.style.width = v.width * state.scale + "px";
-    box.style.fontFamily = `"${fontFamilyFor(v.font)}"`;
-    box.style.fontSize = Math.max(6, v.font_size * state.scale) + "px";
-    box.style.color = v.color;
-    box.style.textAlign = v.align;
+    const textDiv = box.querySelector(".var-box-text");
+    applyBoxStyles(box, textDiv, v);
     positionToolbar(i);
+    syncInspectorProps();
   }
 
   function updateAlignButtons(align) {
     els.toolbar.querySelectorAll(".tb-align-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.align === align);
     });
+    if (els.propsPanel) {
+      els.propsPanel.querySelectorAll(".insp-align-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.align === align);
+      });
+    }
+  }
+
+  function syncInspectorProps() {
+    const v = currentSelected();
+    if (!els.propsPanel) return;
+    if (!v) {
+      els.propsPanel.hidden = true;
+      return;
+    }
+    els.propsPanel.hidden = false;
+    if (els.inspFont) els.inspFont.value = v.font;
+    if (els.inspSize) els.inspSize.value = v.font_size;
+    if (els.inspColor) els.inspColor.value = v.color;
+    if (els.inspColorText) els.inspColorText.textContent = v.color;
+
+    if (els.inspBold) els.inspBold.classList.toggle("active", Boolean(v.bold));
+    if (els.inspItalic) els.inspItalic.classList.toggle("active", Boolean(v.italic));
+    if (els.inspUnderline) els.inspUnderline.classList.toggle("active", Boolean(v.underline));
+    if (els.inspStrike) els.inspStrike.classList.toggle("active", Boolean(v.strikethrough));
+    if (els.inspCase) els.inspCase.classList.toggle("active", Boolean(v.uppercase));
+
+    updateAlignButtons(v.align);
+
+    if (els.inspLineHeight) els.inspLineHeight.value = v.line_height || 1.2;
+    if (els.inspLetterSpacing) els.inspLetterSpacing.value = v.letter_spacing || 0;
+    if (els.inspBgColor) els.inspBgColor.value = v.bg_color || "#ffffff";
+    if (els.inspStrokeWidth) els.inspStrokeWidth.value = v.stroke_width || 0;
+    if (els.inspStrokeColor) els.inspStrokeColor.value = v.stroke_color || "#000000";
+
+    const pct = Math.round((v.opacity !== undefined ? v.opacity : 1.0) * 100);
+    if (els.inspOpacity) els.inspOpacity.value = pct;
+    if (els.inspOpacityVal) els.inspOpacityVal.textContent = pct + "%";
   }
 
   function positionToolbar(i) {
@@ -669,13 +947,33 @@
     els.tbFont.value = v.font;
     els.tbSize.value = v.font_size;
     els.tbColor.value = v.color;
+
+    if (els.tbBold) els.tbBold.classList.toggle("active", Boolean(v.bold));
+    if (els.tbItalic) els.tbItalic.classList.toggle("active", Boolean(v.italic));
+    if (els.tbUnderline) els.tbUnderline.classList.toggle("active", Boolean(v.underline));
+    if (els.tbStrike) els.tbStrike.classList.toggle("active", Boolean(v.strikethrough));
+    if (els.tbCase) els.tbCase.classList.toggle("active", Boolean(v.uppercase));
+
+    if (els.tbLineHeight) els.tbLineHeight.value = v.line_height || 1.2;
+    if (els.tbLetterSpacing) els.tbLetterSpacing.value = v.letter_spacing || 0;
+    if (els.tbBgColor) els.tbBgColor.value = v.bg_color || "#ffffff";
+    if (els.tbStrokeWidth) els.tbStrokeWidth.value = v.stroke_width || 0;
+    if (els.tbStrokeColor) els.tbStrokeColor.value = v.stroke_color || "#000000";
+
+    const pct = Math.round((v.opacity !== undefined ? v.opacity : 1.0) * 100);
+    if (els.tbOpacity) els.tbOpacity.value = pct;
+    if (els.tbOpacityVal) els.tbOpacityVal.textContent = pct + "%";
+
     updateAlignButtons(v.align);
     positionToolbar(state.selectedIndex);
     els.toolbar.hidden = false;
+    syncInspectorProps();
   }
 
   function hideToolbar() {
     els.toolbar.hidden = true;
+    if (els.tbMorePanel) els.tbMorePanel.hidden = true;
+    if (state.selectedIndex === null && els.propsPanel) els.propsPanel.hidden = true;
   }
 
   function onBoxMouseDown(e, i, box, textDiv) {
@@ -698,8 +996,10 @@
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
-      let newLeft = Math.max(0, Math.min(startLeft + dx, els.canvasWrap.clientWidth - box.offsetWidth));
-      let newTop = Math.max(0, Math.min(startTop + dy, els.canvasWrap.clientHeight - box.offsetHeight));
+      let newLeft = startLeft + dx;
+      let newTop = startTop + dy;
+      newLeft = Math.max(0, Math.min(newLeft, els.canvasWrap.clientWidth - box.offsetWidth));
+      newTop = Math.max(0, Math.min(newTop, els.canvasWrap.clientHeight - box.offsetHeight));
       box.style.left = newLeft + "px";
       box.style.top = newTop + "px";
       v.x = Math.round(newLeft / state.scale);
@@ -724,7 +1024,8 @@
     const startX = e.clientX;
     const startWidth = v.width * state.scale;
     function onMove(ev) {
-      let newWidth = Math.max(20, startWidth + (ev.clientX - startX));
+      const dx = ev.clientX - startX;
+      let newWidth = Math.max(20, startWidth + dx);
       newWidth = Math.min(newWidth, els.canvasWrap.clientWidth - box.offsetLeft);
       box.style.width = newWidth + "px";
       v.width = Math.round(newWidth / state.scale);
@@ -738,13 +1039,122 @@
     document.addEventListener("mouseup", onUp);
   }
 
+  function onBarMouseDown(e, i) {
+    e.preventDefault();
+    commitActiveEdit();
+    selectVariable(i);
+    hideToolbar();
+    const v = state.variables[i];
+    const startX = e.clientX;
+    const startT = v.start;
+    const span = v.end - v.start;
+    const pps = pxPerSec();
+    let moved = false;
+    function onMove(ev) {
+      const dt = (ev.clientX - startX) / pps;
+      if (Math.abs(dt) > 0.02) moved = true;
+      let newStart = Math.max(0, Math.min(startT + dt, state.duration - span));
+      let newEnd = newStart + span;
+      v.start = round3(newStart);
+      v.end = round3(newEnd);
+      renderTimeline();
+      syncTimeFields();
+      updateSelectionClasses();
+    }
+    function onUp() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      if (!moved) {
+        seekTo(v.start);
+        showToolbar();
+      }
+      renderVarList();
+      renderBoxes();
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
+  function startBarTrim(e, i, edge) {
+    e.preventDefault();
+    commitActiveEdit();
+    selectVariable(i);
+    hideToolbar();
+    const v = state.variables[i];
+    const startX = e.clientX;
+    const origStart = v.start;
+    const origEnd = v.end;
+    const pps = pxPerSec();
+    function onMove(ev) {
+      const dt = (ev.clientX - startX) / pps;
+      if (edge === "start") {
+        let nextStart = Math.max(0, Math.min(origStart + dt, v.end - MIN_SPAN));
+        v.start = round3(nextStart);
+      } else {
+        let nextEnd = Math.min(state.duration, Math.max(origEnd + dt, v.start + MIN_SPAN));
+        v.end = round3(nextEnd);
+      }
+      renderTimeline();
+      syncTimeFields();
+      updateSelectionClasses();
+    }
+    function onUp() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      renderVarList();
+      renderBoxes();
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
+  function setupTimelineScrub() {
+    function scrub(e) {
+      const rect = els.ruler.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const pps = pxPerSec();
+      seekTo(x / pps);
+    }
+    els.ruler.addEventListener("mousedown", (e) => {
+      scrub(e);
+      function onMove(ev) { scrub(ev); }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+  }
+
+  function setupPlayback() {
+    els.playBtn.addEventListener("click", () => {
+      if (els.video.paused) {
+        if (state.currentTime >= (state.duration - 0.05)) seekTo(0);
+        els.video.play();
+        els.playBtn.textContent = "Pause";
+      } else {
+        els.video.pause();
+        els.playBtn.textContent = "Play";
+      }
+    });
+    els.video.addEventListener("timeupdate", () => {
+      state.currentTime = els.video.currentTime;
+      updatePlayhead();
+      updateReadout();
+      updateSelectionClasses();
+      if (state.selectedIndex !== null) positionToolbar(state.selectedIndex);
+    });
+    els.video.addEventListener("ended", () => {
+      els.playBtn.textContent = "Play";
+    });
+  }
+
   function addVariableAt(xNatural, yNatural) {
     const v = makeVariable(xNatural, yNatural);
     state.variables.push(v);
     const idx = state.variables.length - 1;
-    renderBoxes();
-    renderVarList();
-    renderTimeline();
+    renderAll();
     selectVariable(idx);
     enterTextEditMode(idx);
   }
@@ -753,7 +1163,7 @@
     const width = Math.max(80, Math.round(state.naturalWidth * 0.5));
     const x = (state.naturalWidth - width) / 2;
     const step = state.naturalHeight * 0.12;
-    const y = state.naturalHeight * 0.35 + (state.variables.length % 5) * step;
+    const y = state.naturalHeight * 0.3 + (state.variables.length % 5) * step;
     addVariableAt(Math.max(0, x), Math.max(0, Math.min(y, state.naturalHeight - 40)));
   }
 
@@ -765,7 +1175,7 @@
       return false;
     }
     if (!window.IS_EDIT && !state.videoFile) {
-      showStatus("Please upload a video.", "error");
+      showStatus("Please upload a video file.", "error");
       return false;
     }
     if (!state.variables.length) {
@@ -776,18 +1186,14 @@
     const seen = new Set();
     for (const v of state.variables) {
       if (!labelRe.test(v.label)) {
-        showStatus(`Invalid label "${v.label}".`, "error");
+        showStatus(`Invalid label "${v.label}". Use letters/numbers/underscore, starting with a letter.`, "error");
         return false;
       }
       if (seen.has(v.label)) {
-        showStatus(`Duplicate label "${v.label}".`, "error");
+        showStatus(`Duplicate label "${v.label}". Text labels must be unique.`, "error");
         return false;
       }
       seen.add(v.label);
-      if (!(v.end > v.start)) {
-        showStatus(`"${v.label}" must end after it starts.`, "error");
-        return false;
-      }
     }
     return true;
   }
@@ -807,9 +1213,9 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Save failed");
-        els.saveBtn.textContent = "Saved";
+        els.saveBtn.textContent = "Saved ✓";
         showStatus("Video template saved.", "ok");
-        setTimeout(() => { els.saveBtn.textContent = "Save video"; }, 1500);
+        setTimeout(() => (els.saveBtn.textContent = "Save video"), 1500);
       } else {
         const form = new FormData();
         form.append("name", name);
@@ -829,45 +1235,33 @@
     }
   }
 
-  function onTime() {
-    state.currentTime = els.video.currentTime || 0;
-    movePlayhead();
-    updateReadout();
-    updateSelectionClasses();
-    if (state.selectedIndex !== null && !els.toolbar.hidden) positionToolbar(state.selectedIndex);
-  }
-
   function init() {
     injectFontFaces();
     bindToolbarEvents();
+    setupTimelineScrub();
+    setupPlayback();
+
     els.addVarBtn.addEventListener("click", () => {
       commitActiveEdit();
       addVariableCentered();
     });
-    els.playBtn.addEventListener("click", () => {
-      if (els.video.paused) els.video.play();
-      else els.video.pause();
-    });
-    els.video.addEventListener("timeupdate", onTime);
-    els.video.addEventListener("play", updateReadout);
-    els.video.addEventListener("pause", updateReadout);
-    els.video.addEventListener("seeked", onTime);
-    els.ruler.addEventListener("mousedown", (e) => {
-      const rect = els.ruler.getBoundingClientRect();
-      seekTo(((e.clientX - rect.left) / rect.width) * state.duration);
-    });
+
     els.canvasWrap.addEventListener("dblclick", (e) => {
       if (e.target.closest(".var-box")) return;
       if (!state.naturalWidth) return;
       const rect = els.canvasWrap.getBoundingClientRect();
+      const xDisplay = e.clientX - rect.left;
+      const yDisplay = e.clientY - rect.top;
       commitActiveEdit();
-      addVariableAt((e.clientX - rect.left) / state.scale, (e.clientY - rect.top) / state.scale);
+      addVariableAt(xDisplay / state.scale, yDisplay / state.scale);
     });
+
     els.canvasWrap.addEventListener("mousedown", (e) => {
       if (e.target.closest(".var-box") || e.target.closest(".text-toolbar")) return;
       commitActiveEdit();
       deselectAll();
     });
+
     els.saveBtn.addEventListener("click", save);
     if (els.fieldLabel) {
       els.fieldLabel.addEventListener("change", applyLabel);
@@ -878,20 +1272,12 @@
         }
       });
     }
-    if (window.ResizeObserver) {
-      let lastDisplayed = 0;
-      const observer = new ResizeObserver(() => {
-        if (!state.naturalWidth) return;
-        const displayed = els.video.clientWidth;
-        if (Math.abs(displayed - lastDisplayed) < 1) return;
-        lastDisplayed = displayed;
-        recomputeScale();
-        renderBoxes();
-      });
-      observer.observe(els.video);
+
+    if (window.INITIAL_VIDEO) {
+      loadExisting(window.INITIAL_VIDEO);
+    } else {
+      setupUpload();
     }
-    if (window.INITIAL_VIDEO) loadExisting(window.INITIAL_VIDEO);
-    else setupUpload();
   }
 
   init();
