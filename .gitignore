@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 venv/
 .env
+*.bundle
 data/templates/*
 !data/templates/.gitkeep
 data/videos/*

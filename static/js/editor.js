@@ -30,18 +30,50 @@
     tbFont: el("tb-font"),
     tbSize: el("tb-size"),
     tbColor: el("tb-color"),
+    tbBold: el("tb-bold"),
+    tbItalic: el("tb-italic"),
+    tbUnderline: el("tb-underline"),
+    tbStrike: el("tb-strike"),
+    tbCase: el("tb-case"),
+    tbMore: el("tb-more"),
+    tbMorePanel: el("tb-more-panel"),
+    tbLineHeight: el("tb-line-height"),
+    tbLetterSpacing: el("tb-letter-spacing"),
+    tbBgColor: el("tb-bg-color"),
+    tbBgClear: el("tb-bg-clear"),
+    tbStrokeWidth: el("tb-stroke-width"),
+    tbStrokeColor: el("tb-stroke-color"),
+    tbStrokeClear: el("tb-stroke-clear"),
+    tbOpacity: el("tb-opacity"),
+    tbOpacityVal: el("tb-opacity-val"),
     tbDelete: el("tb-delete"),
     labelFields: el("label-fields"),
     fieldLabel: el("field-label"),
+    propsPanel: el("props-panel"),
+    inspFont: el("insp-font"),
+    inspSize: el("insp-size"),
+    inspColor: el("insp-color"),
+    inspColorText: el("insp-color-text"),
+    inspBold: el("insp-bold"),
+    inspItalic: el("insp-italic"),
+    inspUnderline: el("insp-underline"),
+    inspStrike: el("insp-strike"),
+    inspCase: el("insp-case"),
+    inspLineHeight: el("insp-line-height"),
+    inspLetterSpacing: el("insp-letter-spacing"),
+    inspBgColor: el("insp-bg-color"),
+    inspBgClear: el("insp-bg-clear"),
+    inspStrokeWidth: el("insp-stroke-width"),
+    inspStrokeColor: el("insp-stroke-color"),
+    inspStrokeClear: el("insp-stroke-clear"),
+    inspOpacity: el("insp-opacity"),
+    inspOpacityVal: el("insp-opacity-val"),
   };
 
   function fontFamilyFor(slug) {
     return `tpl-font-${slug}`;
   }
 
-  // Native alert()/confirm() dialogs are suppressed in some embedded
-  // browser contexts (including this app's own preview pane), which makes
-  // failures look like nothing happened. Show feedback inline instead.
   let statusTimer = null;
   function showStatus(message, kind) {
     if (statusTimer) clearTimeout(statusTimer);
@@ -63,6 +95,7 @@
   }
 
   function populateFontSelect(select) {
+    if (!select) return;
     select.innerHTML = window.FONTS.map((f) => {
       const slug = f.file.replace(/\.ttf$/, "");
       return `<option value="${slug}" style="font-family:'${fontFamilyFor(slug)}'">${f.name}</option>`;
@@ -94,6 +127,16 @@
       font: window.FONTS.length ? window.FONTS[0].file.replace(/\.ttf$/, "") : "roboto",
       default_text: label,
       line_height: 1.2,
+      bold: false,
+      italic: false,
+      underline: false,
+      strikethrough: false,
+      uppercase: false,
+      letter_spacing: 0,
+      bg_color: "",
+      stroke_color: "",
+      stroke_width: 0,
+      opacity: 1.0,
     };
   }
 
@@ -140,6 +183,19 @@
 
   function loadExistingTemplate(tpl) {
     state.variables = JSON.parse(JSON.stringify(tpl.variables));
+    state.variables.forEach((v) => {
+      v.bold = Boolean(v.bold);
+      v.italic = Boolean(v.italic);
+      v.underline = Boolean(v.underline);
+      v.strikethrough = Boolean(v.strikethrough);
+      v.uppercase = Boolean(v.uppercase);
+      v.letter_spacing = Number(v.letter_spacing) || 0;
+      v.line_height = Number(v.line_height) || 1.2;
+      v.bg_color = v.bg_color || "";
+      v.stroke_color = v.stroke_color || "";
+      v.stroke_width = Number(v.stroke_width) || 0;
+      v.opacity = v.opacity !== undefined ? Number(v.opacity) : 1.0;
+    });
     state.naturalWidth = tpl.width;
     state.naturalHeight = tpl.height;
     els.addVarBtn.disabled = false;
@@ -170,24 +226,61 @@
     hideToolbar();
   }
 
+  function applyBoxStyles(box, textDiv, v) {
+    box.style.left = v.x * state.scale + "px";
+    box.style.top = v.y * state.scale + "px";
+    box.style.width = v.width * state.scale + "px";
+    box.style.fontFamily = `"${fontFamilyFor(v.font)}"`;
+    box.style.fontSize = Math.max(6, v.font_size * state.scale) + "px";
+    box.style.color = v.color;
+    box.style.textAlign = v.align;
+    box.style.fontWeight = v.bold ? "bold" : "normal";
+    box.style.fontStyle = v.italic ? "italic" : "normal";
+
+    const deco = [];
+    if (v.underline) deco.push("underline");
+    if (v.strikethrough) deco.push("line-through");
+    box.style.textDecoration = deco.length ? deco.join(" ") : "none";
+
+    box.style.textTransform = v.uppercase ? "uppercase" : "none";
+    box.style.lineHeight = v.line_height || 1.2;
+    box.style.letterSpacing = ((v.letter_spacing || 0) * state.scale) + "px";
+    box.style.opacity = v.opacity !== undefined ? v.opacity : 1.0;
+
+    if (textDiv) {
+      if (v.bg_color) {
+        textDiv.style.backgroundColor = v.bg_color;
+        textDiv.style.padding = "2px 6px";
+        textDiv.style.borderRadius = "4px";
+      } else {
+        textDiv.style.backgroundColor = "transparent";
+        textDiv.style.padding = "0";
+        textDiv.style.borderRadius = "0";
+      }
+
+      if (v.stroke_color && v.stroke_width > 0) {
+        const sw = Math.max(0.5, v.stroke_width * state.scale);
+        textDiv.style.webkitTextStroke = `${sw}px ${v.stroke_color}`;
+        textDiv.style.paintOrder = "stroke fill";
+      } else {
+        textDiv.style.webkitTextStroke = "";
+        textDiv.style.paintOrder = "";
+      }
+    }
+  }
+
   function renderBoxes() {
     els.boxesLayer.innerHTML = "";
     state.variables.forEach((v, i) => {
       const box = document.createElement("div");
       box.className = "var-box" + (i === state.selectedIndex ? " selected" : "");
-      box.style.left = v.x * state.scale + "px";
-      box.style.top = v.y * state.scale + "px";
-      box.style.width = v.width * state.scale + "px";
-      box.style.fontFamily = `"${fontFamilyFor(v.font)}"`;
-      box.style.fontSize = Math.max(6, v.font_size * state.scale) + "px";
-      box.style.color = v.color;
-      box.style.textAlign = v.align;
-      box.style.lineHeight = v.line_height || 1.2;
 
       const textDiv = document.createElement("div");
       textDiv.className = "var-box-text";
       textDiv.textContent = v.default_text || v.label;
       box.appendChild(textDiv);
+
+      applyBoxStyles(box, textDiv, v);
 
       const tag = document.createElement("span");
       tag.className = "box-label-tag";
@@ -234,6 +327,7 @@
     if (!state.variables.length) {
       els.varList.innerHTML = '<p class="muted small">No text yet.</p>';
       syncLabelField();
+      syncInspectorProps();
       return;
     }
     state.variables.forEach((v, i) => {
@@ -255,6 +349,7 @@
       els.varList.appendChild(item);
     });
     syncLabelField();
+    syncInspectorProps();
   }
 
   function escapeHtml(s) {
@@ -267,6 +362,7 @@
     state.selectedIndex = i;
     updateSelectionClasses();
     syncLabelField();
+    syncInspectorProps();
   }
 
   function deselectAll() {
@@ -274,6 +370,7 @@
     updateSelectionClasses();
     hideToolbar();
     syncLabelField();
+    syncInspectorProps();
   }
 
   function syncLabelField() {
@@ -311,9 +408,6 @@
     renderVarList();
   }
 
-  // Toggles the "selected" class on existing box/list elements without
-  // rebuilding the DOM — rebuilding mid-drag would detach the element the
-  // drag handler is actively moving.
   function updateSelectionClasses() {
     Array.from(els.boxesLayer.children).forEach((box, i) => {
       box.classList.toggle("selected", i === state.selectedIndex);
@@ -330,6 +424,7 @@
     renderBoxes();
     renderVarList();
     hideToolbar();
+    syncInspectorProps();
   }
 
   // ---------------------------------------------------------- text editing ----
@@ -426,34 +521,187 @@
 
   function bindToolbarEvents() {
     populateFontSelect(els.tbFont);
-    els.tbFont.addEventListener("change", () => {
+    if (els.inspFont) populateFontSelect(els.inspFont);
+
+    function updateFont(val) {
       const v = currentSelected();
       if (!v) return;
-      v.font = els.tbFont.value;
+      v.font = val;
+      if (els.tbFont) els.tbFont.value = val;
+      if (els.inspFont) els.inspFont.value = val;
       refreshBoxStyle(state.selectedIndex);
-    });
-    els.tbSize.addEventListener("input", () => {
+    }
+    els.tbFont.addEventListener("change", () => updateFont(els.tbFont.value));
+    if (els.inspFont) els.inspFont.addEventListener("change", () => updateFont(els.inspFont.value));
+
+    function updateSize(val) {
       const v = currentSelected();
       if (!v) return;
-      v.font_size = Number(els.tbSize.value) || 1;
+      v.font_size = Number(val) || 1;
+      if (els.tbSize) els.tbSize.value = v.font_size;
+      if (els.inspSize) els.inspSize.value = v.font_size;
       refreshBoxStyle(state.selectedIndex);
       renderVarList();
-    });
-    els.tbColor.addEventListener("input", () => {
+    }
+    els.tbSize.addEventListener("input", () => updateSize(els.tbSize.value));
+    if (els.inspSize) els.inspSize.addEventListener("input", () => updateSize(els.inspSize.value));
+
+    function updateColor(val) {
       const v = currentSelected();
       if (!v) return;
-      v.color = els.tbColor.value;
+      v.color = val;
+      if (els.tbColor) els.tbColor.value = val;
+      if (els.inspColor) els.inspColor.value = val;
+      if (els.inspColorText) els.inspColorText.textContent = val;
       refreshBoxStyle(state.selectedIndex);
-    });
+      renderVarList();
+    }
+    els.tbColor.addEventListener("input", () => updateColor(els.tbColor.value));
+    if (els.inspColor) els.inspColor.addEventListener("input", () => updateColor(els.inspColor.value));
+
+    // Format toggles
+    function toggleProp(prop, tbBtn, inspBtn) {
+      const v = currentSelected();
+      if (!v) return;
+      v[prop] = !v[prop];
+      if (tbBtn) tbBtn.classList.toggle("active", Boolean(v[prop]));
+      if (inspBtn) inspBtn.classList.toggle("active", Boolean(v[prop]));
+      refreshBoxStyle(state.selectedIndex);
+    }
+
+    if (els.tbBold) els.tbBold.addEventListener("click", () => toggleProp("bold", els.tbBold, els.inspBold));
+    if (els.inspBold) els.inspBold.addEventListener("click", () => toggleProp("bold", els.tbBold, els.inspBold));
+
+    if (els.tbItalic) els.tbItalic.addEventListener("click", () => toggleProp("italic", els.tbItalic, els.inspItalic));
+    if (els.inspItalic) els.inspItalic.addEventListener("click", () => toggleProp("italic", els.tbItalic, els.inspItalic));
+
+    if (els.tbUnderline) els.tbUnderline.addEventListener("click", () => toggleProp("underline", els.tbUnderline, els.inspUnderline));
+    if (els.inspUnderline) els.inspUnderline.addEventListener("click", () => toggleProp("underline", els.tbUnderline, els.inspUnderline));
+
+    if (els.tbStrike) els.tbStrike.addEventListener("click", () => toggleProp("strikethrough", els.tbStrike, els.inspStrike));
+    if (els.inspStrike) els.inspStrike.addEventListener("click", () => toggleProp("strikethrough", els.tbStrike, els.inspStrike));
+
+    if (els.tbCase) els.tbCase.addEventListener("click", () => toggleProp("uppercase", els.tbCase, els.inspCase));
+    if (els.inspCase) els.inspCase.addEventListener("click", () => toggleProp("uppercase", els.tbCase, els.inspCase));
+
+    // Align
+    function setAlign(align) {
+      const v = currentSelected();
+      if (!v) return;
+      v.align = align;
+      refreshBoxStyle(state.selectedIndex);
+      updateAlignButtons(v.align);
+    }
     els.toolbar.querySelectorAll(".tb-align-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const v = currentSelected();
-        if (!v) return;
-        v.align = btn.dataset.align;
-        refreshBoxStyle(state.selectedIndex);
-        updateAlignButtons(v.align);
-      });
+      btn.addEventListener("click", () => setAlign(btn.dataset.align));
     });
+    if (els.propsPanel) {
+      els.propsPanel.querySelectorAll(".insp-align-btn").forEach((btn) => {
+        btn.addEventListener("click", () => setAlign(btn.dataset.align));
+      });
+    }
+
+    // More options popup
+    if (els.tbMore) {
+      els.tbMore.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (els.tbMorePanel) els.tbMorePanel.hidden = !els.tbMorePanel.hidden;
+      });
+    }
+    if (els.tbMorePanel) {
+      els.tbMorePanel.addEventListener("mousedown", (e) => e.stopPropagation());
+    }
+
+    // Line height
+    function updateLineHeight(val) {
+      const v = currentSelected();
+      if (!v) return;
+      v.line_height = Math.max(0.5, Math.min(4.0, parseFloat(val) || 1.2));
+      if (els.tbLineHeight) els.tbLineHeight.value = v.line_height;
+      if (els.inspLineHeight) els.inspLineHeight.value = v.line_height;
+      refreshBoxStyle(state.selectedIndex);
+    }
+    if (els.tbLineHeight) els.tbLineHeight.addEventListener("input", () => updateLineHeight(els.tbLineHeight.value));
+    if (els.inspLineHeight) els.inspLineHeight.addEventListener("input", () => updateLineHeight(els.inspLineHeight.value));
+
+    // Letter spacing
+    function updateLetterSpacing(val) {
+      const v = currentSelected();
+      if (!v) return;
+      v.letter_spacing = parseFloat(val) || 0;
+      if (els.tbLetterSpacing) els.tbLetterSpacing.value = v.letter_spacing;
+      if (els.inspLetterSpacing) els.inspLetterSpacing.value = v.letter_spacing;
+      refreshBoxStyle(state.selectedIndex);
+    }
+    if (els.tbLetterSpacing) els.tbLetterSpacing.addEventListener("input", () => updateLetterSpacing(els.tbLetterSpacing.value));
+    if (els.inspLetterSpacing) els.inspLetterSpacing.addEventListener("input", () => updateLetterSpacing(els.inspLetterSpacing.value));
+
+    // Background color
+    function updateBgColor(val) {
+      const v = currentSelected();
+      if (!v) return;
+      v.bg_color = val;
+      if (els.tbBgColor) els.tbBgColor.value = val || "#ffffff";
+      if (els.inspBgColor) els.inspBgColor.value = val || "#ffffff";
+      refreshBoxStyle(state.selectedIndex);
+    }
+    if (els.tbBgColor) els.tbBgColor.addEventListener("input", () => updateBgColor(els.tbBgColor.value));
+    if (els.inspBgColor) els.inspBgColor.addEventListener("input", () => updateBgColor(els.inspBgColor.value));
+    if (els.tbBgClear) els.tbBgClear.addEventListener("click", () => updateBgColor(""));
+    if (els.inspBgClear) els.inspBgClear.addEventListener("click", () => updateBgColor(""));
+
+    // Stroke width and color
+    function updateStrokeWidth(val) {
+      const v = currentSelected();
+      if (!v) return;
+      v.stroke_width = Math.max(0, parseFloat(val) || 0);
+      if (v.stroke_width > 0 && !v.stroke_color) v.stroke_color = "#000000";
+      if (els.tbStrokeWidth) els.tbStrokeWidth.value = v.stroke_width;
+      if (els.inspStrokeWidth) els.inspStrokeWidth.value = v.stroke_width;
+      refreshBoxStyle(state.selectedIndex);
+    }
+    function updateStrokeColor(val) {
+      const v = currentSelected();
+      if (!v) return;
+      v.stroke_color = val;
+      if (v.stroke_width === 0) v.stroke_width = 1;
+      if (els.tbStrokeColor) els.tbStrokeColor.value = val;
+      if (els.inspStrokeColor) els.inspStrokeColor.value = val;
+      if (els.tbStrokeWidth) els.tbStrokeWidth.value = v.stroke_width;
+      if (els.inspStrokeWidth) els.inspStrokeWidth.value = v.stroke_width;
+      refreshBoxStyle(state.selectedIndex);
+    }
+    function clearStroke() {
+      const v = currentSelected();
+      if (!v) return;
+      v.stroke_width = 0;
+      v.stroke_color = "";
+      if (els.tbStrokeWidth) els.tbStrokeWidth.value = 0;
+      if (els.inspStrokeWidth) els.inspStrokeWidth.value = 0;
+      refreshBoxStyle(state.selectedIndex);
+    }
+    if (els.tbStrokeWidth) els.tbStrokeWidth.addEventListener("input", () => updateStrokeWidth(els.tbStrokeWidth.value));
+    if (els.inspStrokeWidth) els.inspStrokeWidth.addEventListener("input", () => updateStrokeWidth(els.inspStrokeWidth.value));
+    if (els.tbStrokeColor) els.tbStrokeColor.addEventListener("input", () => updateStrokeColor(els.tbStrokeColor.value));
+    if (els.inspStrokeColor) els.inspStrokeColor.addEventListener("input", () => updateStrokeColor(els.inspStrokeColor.value));
+    if (els.tbStrokeClear) els.tbStrokeClear.addEventListener("click", clearStroke);
+    if (els.inspStrokeClear) els.inspStrokeClear.addEventListener("click", clearStroke);
+
+    // Opacity
+    function updateOpacity(val) {
+      const v = currentSelected();
+      if (!v) return;
+      const pct = parseInt(val, 10) || 100;
+      v.opacity = Math.max(0.05, Math.min(1.0, pct / 100));
+      if (els.tbOpacity) els.tbOpacity.value = pct;
+      if (els.tbOpacityVal) els.tbOpacityVal.textContent = pct + "%";
+      if (els.inspOpacity) els.inspOpacity.value = pct;
+      if (els.inspOpacityVal) els.inspOpacityVal.textContent = pct + "%";
+      refreshBoxStyle(state.selectedIndex);
+    }
+    if (els.tbOpacity) els.tbOpacity.addEventListener("input", () => updateOpacity(els.tbOpacity.value));
+    if (els.inspOpacity) els.inspOpacity.addEventListener("input", () => updateOpacity(els.inspOpacity.value));
+
     els.tbDelete.addEventListener("click", () => {
       if (state.selectedIndex === null) return;
       deleteVariable(state.selectedIndex);
@@ -468,20 +716,53 @@
     const box = els.boxesLayer.children[i];
     const v = state.variables[i];
     if (!box || !v) return;
-    box.style.left = v.x * state.scale + "px";
-    box.style.top = v.y * state.scale + "px";
-    box.style.width = v.width * state.scale + "px";
-    box.style.fontFamily = `"${fontFamilyFor(v.font)}"`;
-    box.style.fontSize = Math.max(6, v.font_size * state.scale) + "px";
-    box.style.color = v.color;
-    box.style.textAlign = v.align;
+    const textDiv = box.querySelector(".var-box-text");
+    applyBoxStyles(box, textDiv, v);
     positionToolbar(i);
+    syncInspectorProps();
   }
 
   function updateAlignButtons(align) {
     els.toolbar.querySelectorAll(".tb-align-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.align === align);
     });
+    if (els.propsPanel) {
+      els.propsPanel.querySelectorAll(".insp-align-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.align === align);
+      });
+    }
+  }
+
+  function syncInspectorProps() {
+    const v = currentSelected();
+    if (!els.propsPanel) return;
+    if (!v) {
+      els.propsPanel.hidden = true;
+      return;
+    }
+    els.propsPanel.hidden = false;
+    if (els.inspFont) els.inspFont.value = v.font;
+    if (els.inspSize) els.inspSize.value = v.font_size;
+    if (els.inspColor) els.inspColor.value = v.color;
+    if (els.inspColorText) els.inspColorText.textContent = v.color;
+
+    if (els.inspBold) els.inspBold.classList.toggle("active", Boolean(v.bold));
+    if (els.inspItalic) els.inspItalic.classList.toggle("active", Boolean(v.italic));
+    if (els.inspUnderline) els.inspUnderline.classList.toggle("active", Boolean(v.underline));
+    if (els.inspStrike) els.inspStrike.classList.toggle("active", Boolean(v.strikethrough));
+    if (els.inspCase) els.inspCase.classList.toggle("active", Boolean(v.uppercase));
+
+    updateAlignButtons(v.align);
+
+    if (els.inspLineHeight) els.inspLineHeight.value = v.line_height || 1.2;
+    if (els.inspLetterSpacing) els.inspLetterSpacing.value = v.letter_spacing || 0;
+    if (els.inspBgColor) els.inspBgColor.value = v.bg_color || "#ffffff";
+    if (els.inspStrokeWidth) els.inspStrokeWidth.value = v.stroke_width || 0;
+    if (els.inspStrokeColor) els.inspStrokeColor.value = v.stroke_color || "#000000";
+
+    const pct = Math.round((v.opacity !== undefined ? v.opacity : 1.0) * 100);
+    if (els.inspOpacity) els.inspOpacity.value = pct;
+    if (els.inspOpacityVal) els.inspOpacityVal.textContent = pct + "%";
   }
 
   function positionToolbar(i) {
@@ -492,7 +773,7 @@
     const boxTop = parseFloat(box.style.top) || 0;
     const boxWidth = parseFloat(box.style.width) || box.offsetWidth;
 
-    els.toolbar.hidden = false; // must be visible to measure
+    els.toolbar.hidden = false;
     const tbWidth = els.toolbar.offsetWidth;
     const tbHeight = els.toolbar.offsetHeight;
 
@@ -512,20 +793,39 @@
     els.tbFont.value = v.font;
     els.tbSize.value = v.font_size;
     els.tbColor.value = v.color;
+
+    if (els.tbBold) els.tbBold.classList.toggle("active", Boolean(v.bold));
+    if (els.tbItalic) els.tbItalic.classList.toggle("active", Boolean(v.italic));
+    if (els.tbUnderline) els.tbUnderline.classList.toggle("active", Boolean(v.underline));
+    if (els.tbStrike) els.tbStrike.classList.toggle("active", Boolean(v.strikethrough));
+    if (els.tbCase) els.tbCase.classList.toggle("active", Boolean(v.uppercase));
+
+    if (els.tbLineHeight) els.tbLineHeight.value = v.line_height || 1.2;
+    if (els.tbLetterSpacing) els.tbLetterSpacing.value = v.letter_spacing || 0;
+    if (els.tbBgColor) els.tbBgColor.value = v.bg_color || "#ffffff";
+    if (els.tbStrokeWidth) els.tbStrokeWidth.value = v.stroke_width || 0;
+    if (els.tbStrokeColor) els.tbStrokeColor.value = v.stroke_color || "#000000";
+
+    const pct = Math.round((v.opacity !== undefined ? v.opacity : 1.0) * 100);
+    if (els.tbOpacity) els.tbOpacity.value = pct;
+    if (els.tbOpacityVal) els.tbOpacityVal.textContent = pct + "%";
+
     updateAlignButtons(v.align);
     positionToolbar(state.selectedIndex);
     els.toolbar.hidden = false;
+    syncInspectorProps();
   }
 
   function hideToolbar() {
     els.toolbar.hidden = true;
+    if (els.tbMorePanel) els.tbMorePanel.hidden = true;
+    if (state.selectedIndex === null && els.propsPanel) els.propsPanel.hidden = true;
   }
 
   // ---------------------------------------------------------- drag/resize ----
 
   function onBoxMouseDown(e, i, box, textDiv) {
     if (textDiv.isContentEditable && document.activeElement === textDiv) {
-      // already editing this text box — let the browser place the cursor
       e.stopPropagation();
       return;
     }
@@ -608,8 +908,6 @@
   function addVariableCentered() {
     const width = Math.max(60, Math.round(state.naturalWidth * 0.45));
     const x = (state.naturalWidth - width) / 2;
-    // stagger successive additions vertically so they don't stack exactly
-    // on top of each other and become impossible to grab individually
     const step = state.naturalHeight * 0.12;
     const y = state.naturalHeight * 0.3 + (state.variables.length % 5) * step;
     addVariableAt(Math.max(0, x), Math.max(0, Math.min(y, state.naturalHeight - 40)));

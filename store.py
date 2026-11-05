@@ -75,6 +75,27 @@ def validate_variables(variables):
         v.setdefault("font", "roboto")
         v.setdefault("default_text", label)
         v.setdefault("line_height", 1.2)
+        v.setdefault("bold", False)
+        v.setdefault("italic", False)
+        v.setdefault("underline", False)
+        v.setdefault("strikethrough", False)
+        v.setdefault("uppercase", False)
+        v.setdefault("letter_spacing", 0)
+        v.setdefault("bg_color", "")
+        v.setdefault("stroke_color", "")
+        v.setdefault("stroke_width", 0)
+        v.setdefault("opacity", 1.0)
+        v["bold"] = bool(v.get("bold", False))
+        v["italic"] = bool(v.get("italic", False))
+        v["underline"] = bool(v.get("underline", False))
+        v["strikethrough"] = bool(v.get("strikethrough", False))
+        v["uppercase"] = bool(v.get("uppercase", False))
+        v["letter_spacing"] = float(v.get("letter_spacing") or 0)
+        v["line_height"] = float(v.get("line_height") or 1.2)
+        v["bg_color"] = str(v.get("bg_color") or "").strip()
+        v["stroke_color"] = str(v.get("stroke_color") or "").strip()
+        v["stroke_width"] = float(v.get("stroke_width") or 0)
+        v["opacity"] = max(0.05, min(1.0, float(v.get("opacity") if v.get("opacity") is not None else 1.0)))
         if v["align"] not in ("left", "center", "right"):
             raise InvalidTemplate(f"Variable '{label}' has invalid align '{v['align']}'")
 
@@ -97,8 +118,6 @@ def create_template(name, image_path, image_ext, width, height, variables):
 
     dest = os.path.join(tdir, filename)
     try:
-        # shutil.move() falls back to copy+delete when /tmp and the app
-        # directory are different filesystems (common in containers).
         shutil.move(image_path, dest)
         with open(_template_json_path(template_id), "w") as f:
             json.dump(record, f, indent=2)
@@ -148,19 +167,24 @@ def list_templates():
     out = []
     if not os.path.isdir(TEMPLATES_DIR):
         return out
-    for template_id in sorted(os.listdir(TEMPLATES_DIR)):
-        path = _template_json_path(template_id)
-        if os.path.exists(path):
-            with open(path) as f:
-                record = json.load(f)
-            out.append({
+    for entry in os.scandir(TEMPLATES_DIR):
+        if not entry.is_dir():
+            continue
+        try:
+            record = get_template(entry.name)
+        except (TemplateNotFound, json.JSONDecodeError):
+            continue
+        out.append(
+            {
                 "id": record["id"],
-                "name": record["name"],
-                "width": record["width"],
-                "height": record["height"],
-                "variable_count": len(record["variables"]),
-                "labels": [v["label"] for v in record["variables"]],
-            })
+                "name": record.get("name", "Untitled"),
+                "width": record.get("width"),
+                "height": record.get("height"),
+                "variables": [v["label"] for v in record.get("variables", [])],
+                "updated_at": os.path.getmtime(_template_json_path(entry.name)),
+            }
+        )
+    out.sort(key=lambda t: t.get("updated_at", 0), reverse=True)
     return out
 
 

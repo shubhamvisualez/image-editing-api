@@ -57,7 +57,7 @@
     </div>
     <h3>Layers</h3>
     <table class="var-table">
-      <thead><tr><th>Label</th><th>From</th><th>To</th><th>Font</th><th>Size</th></tr></thead>
+      <thead><tr><th>Label</th><th>From</th><th>To</th><th>Font</th><th>Size</th><th>Formatting</th></tr></thead>
       <tbody>
         {% for v in video.variables %}
           <tr>
@@ -65,7 +65,19 @@
             <td>{{ '%.2f'|format(v.start) }}s</td>
             <td>{{ '%.2f'|format(v.end) }}s</td>
             <td>{{ v.font }}</td>
-            <td>{{ v.font_size }}</td>
+            <td>{{ v.font_size }}px</td>
+            <td>
+              {% if v.bold %}<span class="style-badge">Bold</span>{% endif %}
+              {% if v.italic %}<span class="style-badge">Italic</span>{% endif %}
+              {% if v.underline %}<span class="style-badge">Underline</span>{% endif %}
+              {% if v.strikethrough %}<span class="style-badge">Strike</span>{% endif %}
+              {% if v.uppercase %}<span class="style-badge">Uppercase</span>{% endif %}
+              {% if v.bg_color %}<span class="style-badge" style="background: {{ v.bg_color }}; color: #000;">Highlight</span>{% endif %}
+              {% if v.stroke_color and v.stroke_width %}<span class="style-badge">{{ v.stroke_width }}px Outline</span>{% endif %}
+              {% if not (v.bold or v.italic or v.underline or v.strikethrough or v.uppercase or v.bg_color or (v.stroke_color and v.stroke_width)) %}
+                <span class="muted small">Regular ({{ v.align }})</span>
+              {% endif %}
+            </td>
           </tr>
         {% endfor %}
       </tbody>
