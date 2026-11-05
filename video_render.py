@@ -6,6 +6,7 @@ overlay filter. The source video file is never modified.
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -22,7 +23,7 @@ class VideoRenderError(Exception):
 
 
 def ffmpeg_available():
-    return shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+    return shutil.which("ffmpeg") is not None
 
 
 def _run(cmd):
@@ -40,38 +41,57 @@ def _run(cmd):
 def probe_video(path):
     if not ffmpeg_available():
         raise VideoRenderError(_FFMPEG_HELP)
-    proc = _run([
-        "ffprobe", "-v", "error", "-print_format", "json",
-        "-show_format", "-show_streams", path,
-    ])
-    try:
-        data = json.loads(proc.stdout or "{}")
-    except json.JSONDecodeError as exc:
-        raise VideoRenderError("Could not read video details.") from exc
-    video = next((s for s in data.get("streams", []) if s.get("codec_type") == "video"), None)
-    if not video:
-        raise VideoRenderError("The file has no video stream.")
-    width = int(video.get("width") or 0)
-    height = int(video.get("height") or 0)
-    rotation = 0
-    tags = video.get("tags") or {}
-    try:
-        rotation = int(float(tags.get("rotate") or 0))
-    except (TypeError, ValueError):
-        rotation = 0
-    if rotation % 180 != 0:
-        width, height = height, width
-    duration = 0.0
-    for source in (data.get("format") or {}, video):
+    if shutil.which("ffprobe"):
+        proc = _run([
+            "ffprobe", "-v", "error", "-print_format", "json",
+            "-show_format", "-show_streams", path,
+        ])
         try:
-            duration = float(source.get("duration") or 0)
+            data = json.loads(proc.stdout or "{}")
+        except json.JSONDecodeError as exc:
+            raise VideoRenderError("Could not read video details.") from exc
+        video = next((s for s in data.get("streams", []) if s.get("codec_type") == "video"), None)
+        if not video:
+            raise VideoRenderError("The file has no video stream.")
+        width = int(video.get("width") or 0)
+        height = int(video.get("height") or 0)
+        rotation = 0
+        tags = video.get("tags") or {}
+        try:
+            rotation = int(float(tags.get("rotate") or 0))
         except (TypeError, ValueError):
-            duration = 0.0
-        if duration > 0:
-            break
+            rotation = 0
+        if rotation % 180 != 0:
+            width, height = height, width
+        duration = 0.0
+        for source in (data.get("format") or {}, video):
+            try:
+                duration = float(source.get("duration") or 0)
+            except (TypeError, ValueError):
+                duration = 0.0
+            if duration > 0:
+                break
+        if width <= 0 or height <= 0 or duration <= 0:
+            raise VideoRenderError("Could not read the video size or duration.")
+        has_audio = any(s.get("codec_type") == "audio" for s in data.get("streams", []))
+        return width, height, duration, has_audio
+
+    # Fallback to ffmpeg -i when ffprobe is not installed
+    proc = subprocess.run(["ffmpeg", "-i", path], capture_output=True, text=True)
+    stderr = proc.stderr or ""
+    dur_m = re.search(r"Duration:\s*(\d+):(\d+):([\d\.]+)", stderr)
+    duration = 0.0
+    if dur_m:
+        h, m, s = dur_m.groups()
+        duration = int(h) * 3600 + int(m) * 60 + float(s)
+    vid_m = re.search(r"Stream #.*Video:.*?(\d{2,5})x(\d{2,5})", stderr)
+    if not vid_m:
+        raise VideoRenderError("The file has no video stream or dimensions could not be read.")
+    width = int(vid_m.group(1))
+    height = int(vid_m.group(2))
+    has_audio = bool(re.search(r"Stream #.*Audio:", stderr))
     if width <= 0 or height <= 0 or duration <= 0:
         raise VideoRenderError("Could not read the video size or duration.")
-    has_audio = any(s.get("codec_type") == "audio" for s in data.get("streams", []))
     return width, height, duration, has_audio
 
 
