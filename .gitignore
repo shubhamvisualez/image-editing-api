@@ -5,3 +5,7 @@ venv/
 .env
 data/templates/*
 !data/templates/.gitkeep
+data/videos/*
+!data/videos/.gitkeep
+data/renders/*
+!data/renders/.gitkeep

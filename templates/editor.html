@@ -53,8 +53,11 @@
 
     <aside class="inspector-pane">
       <h2>Text variables</h2>
-      <p class="muted small">Each label is the API key. Click a label on the image to rename it.</p>
+      <p class="muted small">The variable name is the API key. Select a text box, then rename it here.</p>
       <div id="var-list" class="var-list"></div>
+      <label id="label-fields" class="name-field" hidden>Variable name
+        <input id="field-label" type="text" autocomplete="off" spellcheck="false" placeholder="headline">
+      </label>
       {% if not template %}
         <p class="muted small">Upload an image to start adding text.</p>
       {% endif %}

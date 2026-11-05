@@ -7,15 +7,20 @@ values to an API endpoint.
 """
 import json
 import os
+import sys
 import tempfile
 
-from flask import Flask, abort, jsonify, render_template, request, send_file
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, send_file
 from PIL import Image
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+import pirsonal_api
 import render as renderer
 import store
+import video_catalog
+import video_render
+import video_store
 
 
 def _load_env_file():
@@ -36,9 +41,19 @@ def _load_env_file():
 _load_env_file()
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB uploads
+app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # video uploads; images stay capped below
 
 ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
+ALLOWED_VIDEO_EXT = {".mp4", ".m4v", ".mov", ".webm"}
+IMAGE_UPLOAD_LIMIT = 20 * 1024 * 1024
+
+
+@app.before_request
+def keep_image_upload_limit():
+    # Image templates keep the original 20 MB cap. Video uploads use the higher app limit.
+    if request.endpoint == "api_templates" and request.method == "POST":
+        if (request.content_length or 0) > IMAGE_UPLOAD_LIMIT:
+            raise RequestEntityTooLarge()
 
 
 # ---------------------------------------------------------------- pages ----
@@ -87,7 +102,8 @@ def template_image(template_id):
 
 
 def public_base():
-    return request.url_root.rstrip("/") + (request.script_root or "")
+    # url_root already includes script_root (/image-editor). Do not append it again.
+    return request.url_root.rstrip("/")
 
 
 # ------------------------------------------------------------------ api ----
@@ -216,6 +232,261 @@ def io_bytes(data):
     return io.BytesIO(data)
 
 
+# ---------------------------------------------------------------- videos ----
+
+@app.route("/videos")
+def videos_index():
+    return render_template("videos.html", videos=video_store.list_videos())
+
+
+@app.route("/videos/new")
+def new_video_page():
+    fonts = renderer.load_font_manifest()
+    return render_template("video_editor.html", fonts=fonts, video=None)
+
+
+@app.route("/videos/<video_id>/edit")
+def edit_video_page(video_id):
+    try:
+        record = video_store.get_video(video_id)
+    except video_store.VideoNotFound:
+        abort(404)
+    fonts = renderer.load_font_manifest()
+    return render_template("video_editor.html", fonts=fonts, video=record)
+
+
+@app.route("/videos/<video_id>/preview")
+def preview_video_page(video_id):
+    try:
+        record = video_store.get_video(video_id)
+    except video_store.VideoNotFound:
+        abort(404)
+    root = public_base()
+    return render_template(
+        "video_preview.html",
+        video=record,
+        api_url=root + f"/api/videos/{video_id}/render",
+        short_url=root + f"/v/{video_id}",
+        rpc_url=root + "/api",
+    )
+
+
+@app.route("/video-file/<video_id>")
+def video_file(video_id):
+    try:
+        path = video_store.video_path(video_id)
+        record = video_store.get_video(video_id)
+    except video_store.VideoNotFound:
+        abort(404)
+    return send_file(path, mimetype=video_store.mime_for(record.get("video_file")), conditional=True)
+
+
+@app.route("/video-poster/<video_id>")
+def video_poster(video_id):
+    try:
+        path = video_store.poster_path(video_id)
+    except video_store.VideoNotFound:
+        abort(404)
+    if not path:
+        abort(404)
+    return send_file(path, mimetype="image/jpeg", max_age=3600)
+
+
+@app.route("/api/videos", methods=["GET", "POST"])
+def api_videos():
+    if request.method == "GET":
+        return jsonify(video_store.list_videos())
+
+    name = request.form.get("name", "").strip()
+    variables_raw = request.form.get("variables")
+    video_file_upload = request.files.get("video")
+    if not video_file_upload or video_file_upload.filename == "":
+        return jsonify(error="Missing 'video' file."), 400
+    if not variables_raw:
+        return jsonify(error="Missing 'variables' JSON."), 400
+    ext = os.path.splitext(video_file_upload.filename)[1].lower()
+    if ext not in ALLOWED_VIDEO_EXT:
+        return jsonify(error=f"Unsupported video type '{ext}'."), 400
+    try:
+        variables = json.loads(variables_raw)
+    except json.JSONDecodeError as exc:
+        return jsonify(error=f"Invalid 'variables' JSON: {exc}"), 400
+
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=ext)
+    os.close(tmp_fd)
+    poster_path = None
+    video_file_upload.save(tmp_path)
+    try:
+        width, height, duration, has_audio = video_render.probe_video(tmp_path)
+        poster_fd, poster_path = tempfile.mkstemp(suffix=".jpg")
+        os.close(poster_fd)
+        try:
+            video_render.write_poster(tmp_path, poster_path)
+        except video_render.VideoRenderError:
+            os.remove(poster_path)
+            poster_path = None
+        record = video_store.create_video(
+            name, tmp_path, ext, width, height, duration, has_audio, variables, poster_path
+        )
+    except video_store.InvalidVideoTemplate as exc:
+        _cleanup_upload(tmp_path, poster_path)
+        return jsonify(error=str(exc)), 400
+    except video_render.VideoRenderError as exc:
+        _cleanup_upload(tmp_path, poster_path)
+        return jsonify(error=str(exc)), 500
+    except Exception as exc:
+        _cleanup_upload(tmp_path, poster_path)
+        return jsonify(error=f"Could not save video: {exc}"), 500
+    return jsonify(record), 201
+
+
+@app.route("/api/videos/<video_id>", methods=["GET", "PUT", "DELETE"])
+def api_video_detail(video_id):
+    if request.method == "GET":
+        try:
+            return jsonify(video_store.get_video(video_id))
+        except video_store.VideoNotFound:
+            return jsonify(error="Video template not found."), 404
+
+    if request.method == "DELETE":
+        try:
+            video_store.delete_video(video_id)
+        except video_store.VideoNotFound:
+            return jsonify(error="Video template not found."), 404
+        return "", 204
+
+    body = request.get_json(silent=True) or {}
+    try:
+        record = video_store.update_video(
+            video_id,
+            name=body.get("name"),
+            variables=body.get("variables"),
+        )
+    except video_store.VideoNotFound:
+        return jsonify(error="Video template not found."), 404
+    except video_store.InvalidVideoTemplate as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(record)
+
+
+@app.route("/api/videos/<video_id>/render", methods=["GET", "POST"])
+def api_video_render(video_id):
+    if request.method == "GET":
+        values = request.args.to_dict()
+    else:
+        body = request.get_json(silent=True)
+        if body is None:
+            values = request.form.to_dict()
+        else:
+            values = body.get("values", body)
+    if not isinstance(values, dict):
+        return jsonify(error="Provide text values as a JSON object."), 400
+    return render_video_response(video_id, values)
+
+
+@app.route("/v/<video_id>")
+def short_video_render(video_id):
+    """First request encodes and returns the mp4. Later requests return the stored file."""
+    return render_video_file(video_id, request.args.to_dict())
+
+
+@app.route("/api", methods=["POST"])
+def pirsonal_rpc():
+    """Pirsonal-compatible JSON-RPC. Template_Video_New renders a video template."""
+    body = request.get_json(silent=True)
+    if body is None:
+        body = {}
+    return jsonify(pirsonal_api.dispatch(body, public_base()))
+
+
+@app.route("/renders/<render_id>.mp4")
+def rendered_video(render_id):
+    try:
+        row = video_catalog.get(render_id)
+    except video_catalog.CatalogError:
+        row = None
+    if row and row.get("status") == "done" and row.get("s3_key"):
+        return _stream_stored_video(row)
+    path = pirsonal_api.render_file(render_id)
+    if not path:
+        abort(404)
+    return send_file(path, mimetype="video/mp4", conditional=True)
+
+
+def _stream_stored_video(row):
+    range_header = request.headers.get("Range")
+    try:
+        obj = video_catalog.open_s3(row, range_header)
+    except video_catalog.CatalogError:
+        abort(404)
+    status = 206 if range_header else 200
+    headers = {
+        "Content-Type": "video/mp4",
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(obj["ContentLength"]),
+    }
+    if obj.get("ContentRange"):
+        headers["Content-Range"] = obj["ContentRange"]
+    return Response(obj["Body"].iter_chunks(256 * 1024), status=status, headers=headers)
+
+
+def render_video_file(video_id, values):
+    body, result = _start_video_render(video_id, values)
+    if body is None:
+        return result
+    code = (result.get("status") or {}).get("code")
+    render_id = result.get("id")
+    if code == "error":
+        return jsonify(error=(result.get("status") or {}).get("message") or "Render failed"), 500
+    try:
+        row = video_catalog.get(render_id) if code == "done" else video_catalog.wait_for(render_id)
+    except video_catalog.CatalogError as exc:
+        return jsonify(error=str(exc)), 500
+    if not row or row.get("status") != "done" or not row.get("s3_key"):
+        if row and row.get("status") == "processing":
+            return jsonify(error="Video is still processing. Open this link again in a moment."), 504
+        message = (row or {}).get("error_message") or "Render failed"
+        return jsonify(error=message), 500
+    return _stream_stored_video(row)
+
+
+def _start_video_render(video_id, values):
+    try:
+        record = video_store.get_video(video_id)
+    except video_store.VideoNotFound:
+        return None, (jsonify(error="Video template not found."), 404)
+    body = pirsonal_api.dispatch({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "Template_Video_New",
+        "params": {
+            "templateID": video_id,
+            "name": record.get("name") or "",
+            "description": "",
+            "data": values,
+        },
+    }, public_base())
+    result = body.get("result") or {}
+    if body.get("error"):
+        return None, (jsonify(error=body["error"].get("message") or "Render failed"), 500)
+    return body, result
+
+
+def render_video_response(video_id, values):
+    body, result = _start_video_render(video_id, values)
+    if body is None:
+        return result
+    if result.get("status", {}).get("code") == "done" and result.get("url"):
+        return redirect(result["url"])
+    return jsonify(result), 202
+
+
+def _cleanup_upload(video_path, poster_path):
+    for path in (video_path, poster_path):
+        if path and os.path.exists(path):
+            os.remove(path)
+
+
 # --------------------------------------------------------- short image URL ----
 # GET /<template_id>?label=value&label2=value2  -> the rendered image, for
 # dropping straight into <img src>, emails, no-code tools, etc. Placed last
@@ -231,7 +502,15 @@ def short_render(template_id):
 
 @app.route("/healthz")
 def healthz():
-    return {"status": "ok", "image_storage": "local"}
+    return {
+        "status": "ok",
+        "image_storage": "local",
+        "ffmpeg": video_render.ffmpeg_available(),
+        "rendered_videos": {
+            "mysql": video_catalog.mysql_configured(),
+            "s3": video_catalog.s3_configured(),
+        },
+    }
 
 
 class ScriptPrefixMiddleware:
@@ -250,13 +529,26 @@ class ScriptPrefixMiddleware:
         return self.wsgi_app(environ, start_response)
 
 
-_prefix = os.environ.get("URL_PREFIX", "").strip()
-if _prefix and not _prefix.startswith("/"):
-    _prefix = "/" + _prefix
-_prefix = _prefix.rstrip("/")
+def _public_prefix():
+    """Path Apache mounts this app on.
+
+    Every generated link (CSS, JS, images, API, redirects) needs this prefix.
+    A blank or missing URL_PREFIX still uses /image-editor under gunicorn.
+    `python app.py` stays at the site root unless URL_PREFIX is set.
+    """
+    raw = (os.environ.get("URL_PREFIX") or "").strip()
+    if not raw and "gunicorn" in sys.modules:
+        raw = "/image-editor"
+    raw = raw.strip()
+    if raw and not raw.startswith("/"):
+        raw = "/" + raw
+    return raw.rstrip("/")
+
+
+_prefix = _public_prefix()
 if _prefix:
     app.wsgi_app = ScriptPrefixMiddleware(app.wsgi_app, _prefix)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 
 @app.errorhandler(HTTPException)
